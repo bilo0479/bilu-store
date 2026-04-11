@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1036141535984",
+    "project_id": "bilu-store-e1a06",
+    "storage_bucket": "bilu-store-e1a06.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1036141535984:android:1e7a8e6998e5f631149835",
+        "android_client_info": {
+          "package_name": "com.bilustore.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBR-q_PUANDmrDIDdjayhwrZw1jb1EQqxU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

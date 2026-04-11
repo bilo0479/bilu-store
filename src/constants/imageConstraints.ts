@@ -1,0 +1,14 @@
+export const IMAGE_CONSTRAINTS = {
+  MAX_IMAGES_PER_AD: 8,
+  MIN_IMAGES_PER_AD: 1,
+  MAX_FILE_SIZE_BYTES: 10 * 1024 * 1024, // 10 MB
+  COMPRESSED_TARGET_BYTES: 500 * 1024, // 500 KB
+  COMPRESSION_QUALITY: 0.7,
+  MAX_DIMENSION: 1200,
+  THUMBNAIL_WIDTH: 400,
+  THUMBNAIL_HEIGHT: 400,
+  SUPPORTED_FORMATS: ['image/jpeg', 'image/png', 'image/webp'] as const,
+  CLOUDINARY_FOLDER_ADS: 'bilu-store/ads',
+  CLOUDINARY_FOLDER_CHATS: 'bilu-store/chats',
+  CLOUDINARY_FOLDER_AVATARS: 'bilu-store/avatars',
+} as const;

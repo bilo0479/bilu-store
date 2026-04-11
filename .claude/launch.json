@@ -1,0 +1,25 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Expo Mobile (dev)",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["node_modules/expo/bin/cli", "start", "--port", "8081"],
+      "port": 8081
+    },
+    {
+      "name": "Next.js Web Admin (dev)",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["node_modules/.bin/next", "dev"],
+      "cwd": "web",
+      "port": 3000
+    },
+    {
+      "name": "Firebase Emulators (functions)",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "serve"],
+      "cwd": "functions",
+      "port": 5001
+    }
+  ]
+}
