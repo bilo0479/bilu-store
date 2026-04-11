@@ -1,17 +1,23 @@
 import React, { useState } from 'react';
 import {
   View, Text, TextInput, StyleSheet, Pressable,
-  ActivityIndicator, KeyboardAvoidingView, Platform,
+  ActivityIndicator, KeyboardAvoidingView, Platform, NativeModules,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { GoogleSignin } from '@react-native-google-signin/google-signin';
-import { LoginManager, AccessToken } from 'react-native-fbsdk-next';
 import { COLORS, FONT_SIZE } from '../../src/constants/colors';
-import { loginUser, loginWithGoogle, loginWithFacebook } from '../../src/services/AuthService';
+import { loginUser, loginWithGoogle, loginWithGoogleWeb, loginWithFacebook, loginWithFacebookWeb } from '../../src/services/AuthService';
 import { useAuthStore } from '../../src/stores/authStore';
 import { useUiStore } from '../../src/stores/uiStore';
+
+function goAfterAuth() {
+  if (router.canGoBack()) {
+    router.back();
+  } else {
+    router.replace('/(tabs)/home');
+  }
+}
 
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
@@ -37,7 +43,7 @@ export default function LoginScreen() {
       const user = await loginUser(email.trim(), password);
       setUser(user);
       showToast('Welcome back!');
-      router.back();
+      goAfterAuth();
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Login failed';
       if (msg.includes('user-not-found') || msg.includes('wrong-password') || msg.includes('invalid-credential')) {
@@ -54,14 +60,36 @@ export default function LoginScreen() {
     setGoogleLoading(true);
     setError('');
     try {
-      await GoogleSignin.hasPlayServices();
-      const signInResult = await GoogleSignin.signIn();
-      const idToken = signInResult.data?.idToken;
-      if (!idToken) throw new Error('Google sign-in did not return an ID token');
-      const user = await loginWithGoogle(idToken);
+      let user;
+      if (Platform.OS === 'web') {
+        // Web: Firebase popup — no native SDK needed
+        user = await loginWithGoogleWeb();
+      } else {
+        // Guard: RNGoogleSignin must be registered in the native binary.
+        // It is present only in custom / EAS builds, NOT in Expo Go.
+        // Adding "@react-native-google-signin/google-signin" to app.json plugins
+        // and running `eas build` (or `expo run:android`) makes it available.
+        if (!NativeModules.RNGoogleSignin) {
+          setError(
+            'Google Sign-In requires a native build.\n' +
+            'Run: eas build --profile development, then reload the app.'
+          );
+          return;
+        }
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const { GoogleSignin } = require('@react-native-google-signin/google-signin') as typeof import('@react-native-google-signin/google-signin');
+        await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+        const signInResult = await GoogleSignin.signIn();
+        const idToken = signInResult.data?.idToken;
+        if (!idToken) throw new Error(
+          'Google sign-in did not return an ID token. ' +
+          'Ensure EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID is set and offlineAccess is enabled in GoogleSignin.configure().'
+        );
+        user = await loginWithGoogle(idToken);
+      }
       setUser(user);
       showToast('Welcome!');
-      router.back();
+      goAfterAuth();
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Google sign-in failed';
       if (!msg.includes('SIGN_IN_CANCELLED')) setError(msg);
@@ -74,14 +102,23 @@ export default function LoginScreen() {
     setFbLoading(true);
     setError('');
     try {
-      const result = await LoginManager.logInWithPermissions(['public_profile', 'email']);
-      if (result.isCancelled) return;
-      const tokenData = await AccessToken.getCurrentAccessToken();
-      if (!tokenData?.accessToken) throw new Error('Facebook did not return an access token');
-      const user = await loginWithFacebook(tokenData.accessToken);
+      let user;
+      if (Platform.OS === 'web') {
+        // Web: Firebase popup — no native SDK needed
+        user = await loginWithFacebookWeb();
+      } else {
+        // Native: FBSDK (requires native build)
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const { LoginManager, AccessToken } = require('react-native-fbsdk-next') as typeof import('react-native-fbsdk-next');
+        const result = await LoginManager.logInWithPermissions(['public_profile', 'email']);
+        if (result.isCancelled) return;
+        const tokenData = await AccessToken.getCurrentAccessToken();
+        if (!tokenData?.accessToken) throw new Error('Facebook did not return an access token');
+        user = await loginWithFacebook(tokenData.accessToken);
+      }
       setUser(user);
       showToast('Welcome!');
-      router.back();
+      goAfterAuth();
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Facebook login failed';
       setError(msg);
@@ -172,43 +209,45 @@ export default function LoginScreen() {
           <View style={styles.divider} />
         </View>
 
-        <Pressable
-          onPress={() => router.push('/auth/phone-verify')}
-          style={({ pressed }) => [styles.socialBtn, pressed && { opacity: 0.85 }]}
-        >
-          <Ionicons name="call-outline" size={20} color={COLORS.ACCENT} />
-          <Text style={styles.socialBtnText}>Sign in with Phone Number</Text>
-        </Pressable>
+        <View style={styles.socialBtnsContainer}>
+          <Pressable
+            onPress={() => router.push('/auth/phone-verify')}
+            style={({ pressed }) => [styles.socialBtn, pressed && { opacity: 0.85 }]}
+          >
+            <Ionicons name="call-outline" size={20} color={COLORS.ACCENT} />
+            <Text style={styles.socialBtnText}>Sign in with Phone Number</Text>
+          </Pressable>
 
-        <Pressable
-          onPress={handleGoogleLogin}
-          disabled={googleLoading}
-          style={({ pressed }) => [styles.socialBtn, pressed && { opacity: 0.85 }]}
-        >
-          {googleLoading ? (
-            <ActivityIndicator size="small" color={COLORS.ACCENT} />
-          ) : (
-            <Ionicons name="logo-google" size={20} color={COLORS.ACCENT} />
-          )}
-          <Text style={styles.socialBtnText}>Continue with Google</Text>
-        </Pressable>
+          <Pressable
+            onPress={handleGoogleLogin}
+            disabled={googleLoading}
+            style={({ pressed }) => [styles.socialBtn, pressed && { opacity: 0.85 }]}
+          >
+            {googleLoading ? (
+              <ActivityIndicator size="small" color={COLORS.ACCENT} />
+            ) : (
+              <Ionicons name="logo-google" size={20} color={COLORS.ACCENT} />
+            )}
+            <Text style={styles.socialBtnText}>Continue with Google</Text>
+          </Pressable>
 
-        <Pressable
-          onPress={handleFacebookLogin}
-          disabled={fbLoading}
-          style={({ pressed }) => [styles.socialBtn, styles.fbBtn, pressed && { opacity: 0.85 }]}
-        >
-          {fbLoading ? (
-            <ActivityIndicator size="small" color={COLORS.TEXT_ON_ACCENT} />
-          ) : (
-            <Ionicons name="logo-facebook" size={20} color={COLORS.TEXT_ON_ACCENT} />
-          )}
-          <Text style={[styles.socialBtnText, styles.fbBtnText]}>Continue with Facebook</Text>
-        </Pressable>
+          <Pressable
+            onPress={handleFacebookLogin}
+            disabled={fbLoading}
+            style={({ pressed }) => [styles.socialBtn, styles.fbBtn, pressed && { opacity: 0.85 }]}
+          >
+            {fbLoading ? (
+              <ActivityIndicator size="small" color={COLORS.TEXT_ON_ACCENT} />
+            ) : (
+              <Ionicons name="logo-facebook" size={20} color={COLORS.TEXT_ON_ACCENT} />
+            )}
+            <Text style={[styles.socialBtnText, styles.fbBtnText]}>Continue with Facebook</Text>
+          </Pressable>
+        </View>
 
         <View style={styles.footer}>
           <Text style={styles.footerText}>{"Don't have an account? "}</Text>
-          <Pressable onPress={() => { router.back(); router.push('/auth/register'); }}>
+          <Pressable onPress={() => router.replace('/auth/register')}>
             <Text style={styles.footerLink}>Sign Up</Text>
           </Pressable>
         </View>
@@ -323,7 +362,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    marginTop: 8,
+    marginTop: 20,
+    marginBottom: 4,
   },
   divider: {
     flex: 1,
@@ -333,6 +373,10 @@ const styles = StyleSheet.create({
   dividerText: {
     fontSize: FONT_SIZE.SM,
     color: COLORS.TEXT_MUTED,
+  },
+  socialBtnsContainer: {
+    gap: 12,
+    marginTop: 4,
   },
   socialBtn: {
     flexDirection: 'row',

@@ -6,6 +6,7 @@ import {
   onAuthStateChanged,
   PhoneAuthProvider,
   signInWithCredential,
+  signInWithPopup,
   GoogleAuthProvider,
   FacebookAuthProvider,
   type User as FirebaseUser,
@@ -147,6 +148,44 @@ export async function loginWithGoogle(idToken: string): Promise<User> {
   try {
     const credential = GoogleAuthProvider.credential(idToken);
     const result = await signInWithCredential(auth, credential);
+    return upsertSocialUser(result, {
+      name: result.user.displayName ?? 'User',
+      email: result.user.email,
+      avatar: result.user.photoURL,
+    });
+  } catch (error: unknown) {
+    throw toAuthError(error);
+  }
+}
+
+/**
+ * Web-only: Google Sign-In via Firebase popup (no native SDK needed).
+ * Used when Platform.OS === 'web'. On native, use loginWithGoogle(idToken) instead.
+ */
+export async function loginWithGoogleWeb(): Promise<User> {
+  if (!auth || !db) throw new Error('Firebase is not configured');
+  try {
+    const provider = new GoogleAuthProvider();
+    const result = await signInWithPopup(auth, provider);
+    return upsertSocialUser(result, {
+      name: result.user.displayName ?? 'User',
+      email: result.user.email,
+      avatar: result.user.photoURL,
+    });
+  } catch (error: unknown) {
+    throw toAuthError(error);
+  }
+}
+
+/**
+ * Web-only: Facebook Sign-In via Firebase popup (no native SDK needed).
+ * Used when Platform.OS === 'web'. On native, use loginWithFacebook(accessToken) instead.
+ */
+export async function loginWithFacebookWeb(): Promise<User> {
+  if (!auth || !db) throw new Error('Firebase is not configured');
+  try {
+    const provider = new FacebookAuthProvider();
+    const result = await signInWithPopup(auth, provider);
     return upsertSocialUser(result, {
       name: result.user.displayName ?? 'User',
       email: result.user.email,

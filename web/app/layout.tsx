@@ -9,8 +9,8 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: 'Bilu Store - Admin Dashboard',
-  description: 'Admin and seller dashboard for Bilu Store marketplace',
+  title: 'Bilu Store - Local Marketplace',
+  description: 'Buy and sell locally on Bilu Store — Ethiopia\'s local marketplace.',
 };
 
 export default function RootLayout({

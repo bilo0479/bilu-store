@@ -102,13 +102,20 @@ export function subscribeToBadgeCount(callback: (count: number) => void): () => 
 
   const q = query(collection(db, 'chats'), where('participants', 'array-contains', user.id));
 
-  return onSnapshot(q, (snapshot) => {
-    let total = 0;
-    snapshot.forEach((docSnap) => {
-      const unreadMap = (docSnap.data().unreadCount ?? {}) as Record<string, number>;
-      total += unreadMap[user.id] ?? 0;
-    });
-    Notifications.setBadgeCountAsync(total).catch(() => {});
-    callback(total);
-  }, () => callback(0));
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      let total = 0;
+      snapshot.forEach((docSnap) => {
+        const unreadMap = (docSnap.data().unreadCount ?? {}) as Record<string, number>;
+        total += unreadMap[user.id] ?? 0;
+      });
+      Notifications.setBadgeCountAsync(total).catch(() => {});
+      callback(total);
+    },
+    (error) => {
+      console.error('[NotificationService] subscribeToBadgeCount failed:', error.code, error.message);
+      callback(0);
+    }
+  );
 }

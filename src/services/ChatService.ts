@@ -18,28 +18,38 @@ export function subscribeToUserChats(
     orderBy('lastMessageAt', 'desc')
   );
 
-  return onSnapshot(q, (snap) => {
-    const chats: ChatPreview[] = snap.docs.map((d) => {
-      const data = d.data();
-      const participants = (data.participantDetails ?? {}) as Record<string, { name: string; avatar: string | null }>;
-      const otherId = ((data.participants ?? []) as string[]).find((p: string) => p !== userId) ?? '';
-      const other = participants[otherId] ?? { name: 'User', avatar: null };
-      const unreadMap = (data.unreadCount ?? {}) as Record<string, number>;
-      return {
-        id: d.id,
-        otherUserId: otherId,
-        otherUserName: other.name,
-        otherUserAvatar: other.avatar,
-        adId: data.adId ?? '',
-        adTitle: data.adTitle ?? '',
-        adThumbnail: data.adThumbnail ?? '',
-        lastMessage: data.lastMessage ?? '',
-        lastMessageAt: data.lastMessageAt?.toMillis?.() ?? data.lastMessageAt ?? Date.now(),
-        unreadCount: unreadMap[userId] ?? 0,
-      };
-    });
-    onData(chats);
-  });
+  return onSnapshot(
+    q,
+    (snap) => {
+      const chats: ChatPreview[] = snap.docs.map((d) => {
+        const data = d.data();
+        const participants = (data.participantDetails ?? {}) as Record<string, { name: string; avatar: string | null }>;
+        const otherId = ((data.participants ?? []) as string[]).find((p: string) => p !== userId) ?? '';
+        const other = participants[otherId] ?? { name: 'User', avatar: null };
+        const unreadMap = (data.unreadCount ?? {}) as Record<string, number>;
+        return {
+          id: d.id,
+          otherUserId: otherId,
+          otherUserName: other.name,
+          otherUserAvatar: other.avatar,
+          adId: data.adId ?? '',
+          adTitle: data.adTitle ?? '',
+          adThumbnail: data.adThumbnail ?? '',
+          lastMessage: data.lastMessage ?? '',
+          lastMessageAt: data.lastMessageAt?.toMillis?.() ?? data.lastMessageAt ?? Date.now(),
+          unreadCount: unreadMap[userId] ?? 0,
+        };
+      });
+      onData(chats);
+    },
+    (error) => {
+      // Gracefully degrade — chats list shows empty rather than crashing the UI.
+      // Most common cause: composite index not yet deployed.
+      // Deploy with: npx firebase-tools deploy --only firestore:indexes --project <project-id>
+      console.error('[ChatService] subscribeToUserChats failed:', error.code, error.message);
+      onData([]);
+    }
+  );
 }
 
 export function subscribeToMessages(
@@ -54,19 +64,26 @@ export function subscribeToMessages(
     limit(100)
   );
 
-  return onSnapshot(q, (snap) => {
-    const messages: Message[] = snap.docs.map((d) => {
-      const data = d.data();
-      return {
-        id: d.id,
-        senderId: data.senderId ?? '',
-        text: data.text ?? null,
-        image: data.image ?? null,
-        createdAt: data.createdAt?.toMillis?.() ?? data.createdAt ?? Date.now(),
-      };
-    });
-    onData(messages);
-  });
+  return onSnapshot(
+    q,
+    (snap) => {
+      const messages: Message[] = snap.docs.map((d) => {
+        const data = d.data();
+        return {
+          id: d.id,
+          senderId: data.senderId ?? '',
+          text: data.text ?? null,
+          image: data.image ?? null,
+          createdAt: data.createdAt?.toMillis?.() ?? data.createdAt ?? Date.now(),
+        };
+      });
+      onData(messages);
+    },
+    (error) => {
+      console.error('[ChatService] subscribeToMessages failed:', error.code, error.message);
+      onData([]);
+    }
+  );
 }
 
 export async function sendMessage(

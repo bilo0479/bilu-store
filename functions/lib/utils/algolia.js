@@ -3,7 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.ALGOLIA_INDEX_NAME = void 0;
 exports.getAlgoliaClient = getAlgoliaClient;
 const algoliasearch_1 = require("algoliasearch");
-const ALGOLIA_INDEX_NAME = "bilu_store_ads";
+const ALGOLIA_INDEX_NAME = "ads";
 exports.ALGOLIA_INDEX_NAME = ALGOLIA_INDEX_NAME;
 function getAlgoliaClient() {
     const appId = process.env.ALGOLIA_APP_ID || "";

@@ -11,7 +11,7 @@ export const ALGOLIA_CONFIG = {
   searchApiKey: process.env.EXPO_PUBLIC_ALGOLIA_SEARCH_API_KEY ?? 'ca5a76760da8fe09e32b433c88f1fd96',
 };
 
-export const ALGOLIA_INDEX_NAME = 'bilu_store_ads';
+export const ALGOLIA_INDEX_NAME = 'ads';
 
 /**
  * Check if Algolia is configured

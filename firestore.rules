@@ -89,14 +89,25 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // ── Payment sessions ───────────────────────────────────────────────
+    match /payment_sessions/{sessionId} {
+      allow read: if request.auth != null
+                  && request.auth.uid == resource.data.userId;
+      allow create: if false; // written only by Cloud Functions
+      allow update: if false; // updated only by Cloud Functions
+      allow delete: if false;
+    }
+
     // ── Helper functions ───────────────────────────────────────────────
     function isAdmin() {
       return request.auth != null
+             && exists(/databases/$(database)/documents/users/$(request.auth.uid))
              && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'ADMIN';
     }
 
     function isBanned() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.banned == true;
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid))
+             && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.banned == true;
     }
   }
 }

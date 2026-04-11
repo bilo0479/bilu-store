@@ -2,28 +2,30 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'next/navigation';
-import { Loader2, ChevronDown, ArrowLeft, Tag } from 'lucide-react';
+import { Loader2, ChevronDown, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
+import Navbar from '@/components/Navbar';
 import AdCard from '@/components/AdCard';
 import { getAdsByCategory, type Ad, type CategoryId } from '@/services/ads';
 import type { DocumentSnapshot } from 'firebase/firestore';
 
-const CATEGORY_LABELS: Record<string, string> = {
-  ELECTRONICS: 'Electronics',
-  VEHICLES: 'Vehicles',
-  REAL_ESTATE: 'Real Estate',
-  FASHION: 'Fashion',
-  HOME_FURNITURE: 'Home & Furniture',
-  JOBS: 'Jobs',
-  SERVICES: 'Services',
-  EDUCATION: 'Education',
-  SPORTS: 'Sports & Outdoors',
-  OTHER: 'Other',
+const CATEGORY_LABELS: Record<string, { label: string; emoji: string }> = {
+  ELECTRONICS:    { label: 'Electronics',      emoji: '📱' },
+  VEHICLES:       { label: 'Vehicles',          emoji: '🚗' },
+  REAL_ESTATE:    { label: 'Real Estate',       emoji: '🏠' },
+  FASHION:        { label: 'Fashion',            emoji: '👗' },
+  HOME_FURNITURE: { label: 'Home & Furniture',  emoji: '🛋️' },
+  JOBS:           { label: 'Jobs',               emoji: '💼' },
+  SERVICES:       { label: 'Services',           emoji: '🔧' },
+  EDUCATION:      { label: 'Education',          emoji: '📚' },
+  SPORTS:         { label: 'Sports & Outdoors',  emoji: '⚽' },
+  OTHER:          { label: 'Other',              emoji: '📦' },
 };
 
 export default function CategoryPage() {
   const params = useParams();
   const categoryId = params.categoryId as CategoryId;
+  const meta = CATEGORY_LABELS[categoryId] ?? { label: categoryId, emoji: '📦' };
 
   const [ads, setAds] = useState<Ad[]>([]);
   const [loading, setLoading] = useState(true);
@@ -40,17 +42,14 @@ export default function CategoryPage() {
       setAds(result.ads);
       setLastDoc(result.lastVisible);
       setHasMore(result.ads.length === 20);
-    } catch (err) {
-      console.error('Failed to load category ads:', err);
+    } catch {
       setError('Failed to load listings.');
     } finally {
       setLoading(false);
     }
   }, [categoryId]);
 
-  useEffect(() => {
-    loadAds();
-  }, [loadAds]);
+  useEffect(() => { loadAds(); }, [loadAds]);
 
   const loadMore = async () => {
     if (!lastDoc || loadingMore) return;
@@ -60,86 +59,65 @@ export default function CategoryPage() {
       setAds((prev) => [...prev, ...result.ads]);
       setLastDoc(result.lastVisible);
       setHasMore(result.ads.length === 20);
-    } catch (err) {
-      console.error('Failed to load more:', err);
+    } catch {
+      // silent
     } finally {
       setLoadingMore(false);
     }
   };
 
-  const categoryLabel = CATEGORY_LABELS[categoryId] ?? categoryId;
-
   return (
     <div className="min-h-screen bg-bg-screen">
-      <header className="sticky top-0 z-30 border-b border-border bg-white">
-        <div className="mx-auto flex h-14 max-w-6xl items-center gap-3 px-4">
-          <Link
-            href="/"
-            className="flex items-center gap-1 text-sm text-text-muted hover:text-text-dark"
-          >
+      <Navbar />
+
+      {/* Sub-header */}
+      <div className="sticky top-14 z-40 border-b border-border bg-white px-4 py-3">
+        <div className="flex items-center gap-2">
+          <Link href="/" className="flex items-center gap-1 text-sm text-text-muted">
             <ArrowLeft className="h-4 w-4" />
-            Home
           </Link>
-          <span className="text-sm text-text-muted">/</span>
-          <span className="flex items-center gap-1 text-sm font-medium text-text-dark">
-            <Tag className="h-3.5 w-3.5 text-accent" />
-            {categoryLabel}
+          <span className="text-base font-bold text-text-dark">
+            {meta.emoji} {meta.label}
           </span>
         </div>
-      </header>
+      </div>
 
-      <div className="mx-auto max-w-6xl px-4 py-6">
-        <h1 className="mb-6 text-2xl font-bold text-text-dark">
-          {categoryLabel}
-        </h1>
-
+      <div className="px-4 py-5 pb-28">
         {loading ? (
-          <div className="flex items-center justify-center py-20">
-            <Loader2 className="h-8 w-8 animate-spin text-accent" />
+          <div className="flex justify-center py-16">
+            <Loader2 className="h-7 w-7 animate-spin text-accent" />
           </div>
         ) : error ? (
           <div className="rounded-xl border border-status-error/20 bg-red-50 p-6 text-center">
             <p className="text-sm text-status-error">{error}</p>
-            <button onClick={loadAds} className="btn-primary mt-4">
-              Retry
-            </button>
+            <button onClick={loadAds} className="btn-primary mt-4">Retry</button>
           </div>
         ) : ads.length === 0 ? (
-          <div className="rounded-xl border border-border bg-white p-12 text-center">
-            <Tag className="mx-auto mb-3 h-12 w-12 text-text-muted" />
-            <h3 className="text-lg font-semibold text-text-dark">
-              No listings yet
-            </h3>
-            <p className="mt-1 text-sm text-text-muted">
-              No active listings in this category.
-            </p>
+          <div className="rounded-xl border border-border bg-white p-12 text-center text-sm text-text-muted">
+            No listings in this category yet.
           </div>
         ) : (
           <>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {ads.map((ad) => (
-                <AdCard key={ad.id} ad={ad} />
-              ))}
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+              {ads.map((ad) => <AdCard key={ad.id} ad={ad} />)}
             </div>
-
             {hasMore && (
-              <div className="mt-8 text-center">
-                <button
-                  onClick={loadMore}
-                  disabled={loadingMore}
-                  className="btn-secondary"
-                >
-                  {loadingMore ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <ChevronDown className="h-4 w-4" />
-                  )}
+              <div className="mt-6 text-center">
+                <button onClick={loadMore} disabled={loadingMore} className="btn-secondary">
+                  {loadingMore ? <Loader2 className="h-4 w-4 animate-spin" /> : <ChevronDown className="h-4 w-4" />}
                   Load More
                 </button>
               </div>
             )}
           </>
         )}
+      </div>
+
+      {/* Sticky download banner */}
+      <div className="fixed bottom-0 inset-x-0 border-t border-border bg-white px-4 py-3 shadow-md">
+        <Link href="/download" className="btn-primary w-full py-3 text-sm">
+          📱 Download App — Contact sellers &amp; more
+        </Link>
       </div>
     </div>
   );

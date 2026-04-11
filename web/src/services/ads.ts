@@ -64,6 +64,18 @@ function getFirestore() {
   return db;
 }
 
+export async function getRecentAds(count: number = 20): Promise<Ad[]> {
+  const firestore = getFirestore();
+  const q = query(
+    collection(firestore, 'ads'),
+    where('status', '==', 'ACTIVE'),
+    orderBy('createdAt', 'desc'),
+    limit(count)
+  );
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map((d) => ({ id: d.id, ...d.data() })) as Ad[];
+}
+
 export async function getTotalAdsCount(): Promise<number> {
   const firestore = getFirestore();
   const snapshot = await getCountFromServer(collection(firestore, 'ads'));

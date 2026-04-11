@@ -2,6 +2,7 @@ import React from 'react';
 import { Tabs, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { View, StyleSheet, Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS, FONT_SIZE } from '../../src/constants/colors';
 import { useChatStore } from '../../src/stores/chatStore';
 import { useAuthStore } from '../../src/stores/authStore';
@@ -10,6 +11,11 @@ import { redirectToLogin } from '../../src/hooks/useAuth';
 export default function TabLayout() {
   const totalUnread = useChatStore(s => s.totalUnread);
   const isAuthenticated = useAuthStore(s => s.isAuthenticated);
+  // On Android, insets.bottom reflects the system nav bar height (gesture nav ~28dp,
+  // 3-button nav ~48dp). We add it to both height and paddingBottom so tab items
+  // never render behind the system navigation bar.
+  const insets = useSafeAreaInsets();
+  const androidBottomInset = Platform.OS === 'android' ? insets.bottom : 0;
 
   return (
     <Tabs
@@ -21,8 +27,11 @@ export default function TabLayout() {
           backgroundColor: COLORS.BG_CARD,
           borderTopColor: COLORS.BORDER,
           borderTopWidth: 0.5,
-          height: Platform.OS === 'ios' ? 88 : 64,
+          // iOS: 88 already includes the home-indicator safe area.
+          // Android: 64 is the icon+label area; add the system nav bar height on top.
+          height: Platform.OS === 'ios' ? 88 : 64 + androidBottomInset,
           paddingTop: 6,
+          paddingBottom: androidBottomInset,
           elevation: 8,
           shadowColor: COLORS.SHADOW,
           shadowOffset: { width: 0, height: -2 },

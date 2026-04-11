@@ -1,6 +1,6 @@
 import { algoliasearch } from "algoliasearch";
 
-const ALGOLIA_INDEX_NAME = "bilu_store_ads";
+const ALGOLIA_INDEX_NAME = "ads";
 
 function getAlgoliaClient() {
   const appId = process.env.ALGOLIA_APP_ID || "";

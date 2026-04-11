@@ -16,9 +16,14 @@ const path = require('path');
 const fs = require('fs');
 
 // Firebase init
-const serviceAccountPath = path.join(__dirname, 'service-account.json');
+const serviceAccountPath =
+  process.env.GOOGLE_APPLICATION_CREDENTIALS
+    ? path.resolve(process.env.GOOGLE_APPLICATION_CREDENTIALS)
+    : path.join(__dirname, 'service-account.json');
+
 if (!fs.existsSync(serviceAccountPath)) {
-  console.error('ERROR: scripts/service-account.json not found.');
+  console.error('ERROR: service account not found at', serviceAccountPath);
+  console.error('Set GOOGLE_APPLICATION_CREDENTIALS=<path> or place service-account.json in scripts/');
   process.exit(1);
 }
 
@@ -29,7 +34,7 @@ if (!admin.apps.length) {
 // Algolia init
 const ALGOLIA_APP_ID = process.env.ALGOLIA_APP_ID;
 const ALGOLIA_WRITE_API_KEY = process.env.ALGOLIA_WRITE_API_KEY;
-const ALGOLIA_INDEX_NAME = process.env.ALGOLIA_INDEX_NAME || 'bilu_store_ads';
+const ALGOLIA_INDEX_NAME = process.env.ALGOLIA_INDEX_NAME || 'ads';
 
 if (!ALGOLIA_APP_ID || !ALGOLIA_WRITE_API_KEY) {
   console.error('ERROR: ALGOLIA_APP_ID and ALGOLIA_WRITE_API_KEY must be set.');

@@ -9,14 +9,12 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
-import { View, Text, StyleSheet } from "react-native";
+import { View, Text, StyleSheet, Platform } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
-import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { router } from "expo-router";
 
-import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { ErrorBoundary } from "../src/components/ErrorBoundary";
 import { Toast } from "../src/components/Toast";
 import { useAuthStore } from "../src/stores/authStore";
@@ -27,9 +25,39 @@ import { useNetworkStatus } from "../src/hooks/useNetworkStatus";
 
 SplashScreen.preventAutoHideAsync();
 
-GoogleSignin.configure({
-  webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ?? '',
-});
+// Native-only: react-native-keyboard-controller has no web support
+// Lazily require so the web bundle never touches the native module
+let KeyboardProvider: React.ComponentType<{ children: React.ReactNode }> | null = null;
+if (Platform.OS !== 'web') {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    KeyboardProvider = (require('react-native-keyboard-controller') as typeof import('react-native-keyboard-controller')).KeyboardProvider;
+  } catch {
+    // Module unavailable in current environment
+  }
+}
+
+// Native-only: configure Google Sign-In SDK (Android / iOS builds only).
+// NativeModules.RNGoogleSignin is only present in custom / EAS builds where
+// the plugin has been compiled in. Skip silently in Expo Go or web.
+if (Platform.OS !== 'web') {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const mod = require('@react-native-google-signin/google-signin') as typeof import('@react-native-google-signin/google-signin') | undefined;
+    if (mod?.GoogleSignin) {
+      const webClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ?? '';
+      if (!webClientId) {
+        console.warn('[GoogleSignin] EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID is not set. Google Sign-In will fail to return an idToken.');
+      }
+      mod.GoogleSignin.configure({
+        webClientId,
+        offlineAccess: true, // Required to receive idToken on Android
+      });
+    }
+  } catch {
+    // Native module not compiled into this build — sign-in button will show a clear error.
+  }
+}
 
 const queryClient = new QueryClient();
 
@@ -53,13 +81,14 @@ function AuthSessionProvider({ children }: { children: React.ReactNode }) {
             return;
           }
 
-          setUser(profile);
-
-          // Redirect after login - check if there's a saved redirect intent
+          // profile may be null for brand-new social auth users whose Firestore
+          // doc hasn't been written yet (race between signInWithCredential and
+          // upsertSocialUser). Don't call setUser(null) — the login handler's
+          // setUser(user) call already set the correct state.
           if (profile) {
+            setUser(profile);
             const redirectRoute = await consumeRedirectIntent();
             if (redirectRoute) {
-              // Small delay to ensure navigation is ready
               setTimeout(() => {
                 router.push(redirectRoute as never);
               }, 100);
@@ -110,6 +139,8 @@ function RootLayoutNav() {
         contentStyle: { backgroundColor: COLORS.BG_SCREEN },
       }}
     >
+      {/* Root entry: immediately redirects to /(tabs)/home — no header needed */}
+      <Stack.Screen name="index" options={{ headerShown: false }} />
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="auth/login" options={{ headerShown: false, presentation: 'modal' }} />
       <Stack.Screen name="auth/register" options={{ headerShown: false, presentation: 'modal' }} />
@@ -155,14 +186,23 @@ export default function RootLayout() {
       <ErrorBoundary>
         <QueryClientProvider client={queryClient}>
           <GestureHandlerRootView style={{ flex: 1 }}>
-            <KeyboardProvider>
+            {KeyboardProvider ? (
+              <KeyboardProvider>
+                <AuthSessionProvider>
+                  <StatusBar style="dark" />
+                  <OfflineBanner />
+                  <RootLayoutNav />
+                  <Toast />
+                </AuthSessionProvider>
+              </KeyboardProvider>
+            ) : (
               <AuthSessionProvider>
                 <StatusBar style="dark" />
                 <OfflineBanner />
                 <RootLayoutNav />
                 <Toast />
               </AuthSessionProvider>
-            </KeyboardProvider>
+            )}
           </GestureHandlerRootView>
         </QueryClientProvider>
       </ErrorBoundary>

@@ -12,7 +12,20 @@
           "package_name": "com.bilustore.app"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "1036141535984-tn7t85slb81s0qihthhi93stqlvpld08.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.bilustore.app",
+            "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
+          }
+        },
+        {
+          "client_id": "1036141535984-o6o3sk2s8ljkeem76vdam63ia7h0f8gu.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyBR-q_PUANDmrDIDdjayhwrZw1jb1EQqxU"
@@ -20,7 +33,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1036141535984-o6o3sk2s8ljkeem76vdam63ia7h0f8gu.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

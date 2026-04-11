@@ -1,11 +1,16 @@
 import {
+  createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
+  signInWithPopup,
+  GoogleAuthProvider,
+  FacebookAuthProvider,
+  updateProfile,
   signOut,
   onAuthStateChanged as firebaseOnAuthStateChanged,
   type User as FirebaseUser,
   type Unsubscribe,
 } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 
 export interface AppUser {
@@ -23,6 +28,88 @@ export interface AppUser {
   pushToken: string | null;
   createdAt: number;
   lastLoginAt: number;
+}
+
+// Creates the Firestore user doc on first social sign-in, updates lastLoginAt on return visits
+async function upsertSocialUser(
+  firebaseUser: FirebaseUser,
+  overrides: { name: string; email: string | null; avatar: string | null }
+): Promise<AppUser> {
+  if (!db) throw new Error('Firebase Firestore is not initialized');
+  const ref = doc(db, 'users', firebaseUser.uid);
+  const snap = await getDoc(ref);
+
+  if (snap.exists()) {
+    await updateDoc(ref, { lastLoginAt: Date.now() });
+    return { id: snap.id, ...snap.data() } as AppUser;
+  }
+
+  const userData: Omit<AppUser, 'id'> = {
+    name: overrides.name,
+    email: overrides.email,
+    phone: null,
+    avatar: overrides.avatar,
+    location: null,
+    role: 'USER',
+    averageRating: 0,
+    totalReviews: 0,
+    totalAds: 0,
+    banned: false,
+    pushToken: null,
+    createdAt: Date.now(),
+    lastLoginAt: Date.now(),
+  };
+  await setDoc(ref, userData);
+  return { id: firebaseUser.uid, ...userData };
+}
+
+export async function loginWithGoogle(): Promise<AppUser> {
+  if (!auth) throw new Error('Firebase Auth is not initialized');
+  const provider = new GoogleAuthProvider();
+  const result = await signInWithPopup(auth, provider);
+  return upsertSocialUser(result.user, {
+    name: result.user.displayName ?? 'User',
+    email: result.user.email,
+    avatar: result.user.photoURL,
+  });
+}
+
+export async function loginWithFacebook(): Promise<AppUser> {
+  if (!auth) throw new Error('Firebase Auth is not initialized');
+  const provider = new FacebookAuthProvider();
+  const result = await signInWithPopup(auth, provider);
+  return upsertSocialUser(result.user, {
+    name: result.user.displayName ?? 'User',
+    email: result.user.email,
+    avatar: result.user.photoURL,
+  });
+}
+
+export async function registerWithEmail(
+  name: string,
+  email: string,
+  password: string
+): Promise<AppUser> {
+  if (!auth || !db) throw new Error('Firebase is not initialized');
+  const credential = await createUserWithEmailAndPassword(auth, email, password);
+  await updateProfile(credential.user, { displayName: name });
+  const userData: Omit<AppUser, 'id'> = {
+    name,
+    email,
+    phone: null,
+    avatar: null,
+    location: null,
+    role: 'USER',
+    averageRating: 0,
+    totalReviews: 0,
+    totalAds: 0,
+    banned: false,
+    pushToken: null,
+    createdAt: Date.now(),
+    lastLoginAt: Date.now(),
+  };
+  await setDoc(doc(db, 'users', credential.user.uid), userData);
+  return { id: credential.user.uid, ...userData };
 }
 
 export async function loginWithEmail(

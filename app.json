@@ -35,6 +35,7 @@
       "expo-image-picker",
       "expo-location",
       "@react-native-firebase/app",
+      "@react-native-google-signin/google-signin",
       [
         "expo-notifications",
         {
