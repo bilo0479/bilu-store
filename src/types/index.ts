@@ -149,6 +149,63 @@ export interface Report {
   resolvedAt: number | null;
 }
 
+// ── Escrow / Payout ───────────────────────────────────────────────────────────
+
+export type EscrowStatus =
+  | 'pending_payment'   // payment not yet confirmed
+  | 'held'              // payment confirmed, OTP sent to buyer
+  | 'verified'          // seller verified OTP, 8-hr clock started
+  | 'completed'         // payout sent to seller
+  | 'refunded'          // refunded to buyer
+  | 'disputed';         // admin intervention needed
+
+export type PayoutAccountType = 'telebirr' | 'cbe' | 'bank';
+
+export interface PayoutAccount {
+  type: PayoutAccountType;
+  accountNumber: string;
+  accountName: string;
+  bankCode?: string;    // required for bank transfers
+}
+
+export interface EscrowTransaction {
+  id: string;
+  adId: string;
+  adTitle: string;
+  adThumbnail: string;
+  buyerId: string;
+  buyerName: string;
+  sellerId: string;
+  sellerName: string;
+  amount: number;
+  commissionAmount: number;   // 9.5%
+  payoutAmount: number;       // 90.5%
+  currency: Currency;
+  paymentMethod: EscrowPaymentMethod;
+  paymentTxRef: string;
+  status: EscrowStatus;
+  deliveryOtpExpiresAt: number;
+  verifiedAt: number | null;
+  payoutReleaseAt: number | null;
+  completedAt: number | null;
+  refundedAt: number | null;
+  sellerPayoutAccount: PayoutAccount;
+  createdAt: number;
+}
+
+export interface InitiateEscrowResult {
+  txId: string;
+  checkoutUrl: string;
+  amount: number;
+  currency: Currency;
+}
+
+export interface VerifyDeliveryResult {
+  payoutReleaseAt: number;
+}
+
+export type EscrowPaymentMethod = 'CHAPA' | 'TELEBIRR';
+
 export interface PaginatedResult<T> {
   items: T[];
   cursor: string | null;

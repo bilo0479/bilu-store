@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, Pressable,
-  Animated, Dimensions, FlatList, Share, Modal,
+  Animated, Dimensions, FlatList, Share, Modal, ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
@@ -16,8 +16,9 @@ import { useFavoritesStore } from '../../src/stores/favoritesStore';
 import { useUiStore } from '../../src/stores/uiStore';
 import { fetchAdById, incrementViewCount } from '../../src/services/AdService';
 import { getOrCreateChat } from '../../src/services/ChatService';
+import { initiateEscrow } from '../../src/services/EscrowService';
 import { redirectToLogin } from '../../src/hooks/useAuth';
-import type { Ad } from '../../src/types';
+import type { Ad, EscrowPaymentMethod } from '../../src/types';
 import * as Haptics from 'expo-haptics';
 
 const SCREEN_W = Dimensions.get('window').width;
@@ -35,6 +36,9 @@ export default function AdDetailScreen() {
   const [imageIndex, setImageIndex] = useState(0);
   const [chatLoading, setChatLoading] = useState(false);
   const [galleryVisible, setGalleryVisible] = useState(false);
+  const [buyModalVisible, setBuyModalVisible] = useState(false);
+  const [buyMethod, setBuyMethod] = useState<EscrowPaymentMethod>('CHAPA');
+  const [buying, setBuying] = useState(false);
   const favScale = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
@@ -91,6 +95,27 @@ export default function AdDetailScreen() {
       showToast('Failed to start chat');
     } finally {
       setChatLoading(false);
+    }
+  };
+
+  const handleBuyNow = async () => {
+    if (!isAuthenticated || !user || !ad) {
+      void redirectToLogin(`/ad/${ad?.id}`);
+      return;
+    }
+    setBuying(true);
+    try {
+      const result = await initiateEscrow(ad.id, buyMethod);
+      setBuyModalVisible(false);
+      // Open payment WebView then navigate to escrow status
+      router.push({
+        pathname: '/premium/[adId]' as never,
+        params: { checkoutUrl: result.checkoutUrl, txId: result.txId, escrow: '1' },
+      } as never);
+    } catch (e: unknown) {
+      showToast((e as Error).message ?? 'Could not initiate purchase');
+    } finally {
+      setBuying(false);
     }
   };
 
@@ -264,29 +289,94 @@ export default function AdDetailScreen() {
 
       {!isOwner && (
         <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 12 }]}>
-          <Pressable
-            onPress={handleChat}
-            disabled={chatLoading}
-            style={({ pressed }) => [styles.chatBtn, pressed && { opacity: 0.85 }]}
-            accessibilityLabel="Chat with seller"
-            accessibilityRole="button"
-          >
-            {chatLoading ? (
-              <Animated.View><Text style={styles.chatBtnText}>Starting chat...</Text></Animated.View>
-            ) : !canViewFullDetails ? (
-              <>
-                <Ionicons name="log-in-outline" size={20} color={COLORS.TEXT_ON_ACCENT} />
-                <Text style={styles.chatBtnText}>Log In to Contact Seller</Text>
-              </>
-            ) : (
-              <>
-                <Ionicons name="chatbubble-outline" size={20} color={COLORS.TEXT_ON_ACCENT} />
-                <Text style={styles.chatBtnText}>Chat with Seller</Text>
-              </>
+          <View style={styles.bottomActions}>
+            <Pressable
+              onPress={handleChat}
+              disabled={chatLoading}
+              style={({ pressed }) => [styles.chatBtn, pressed && { opacity: 0.85 }]}
+              accessibilityLabel="Chat with seller"
+            >
+              {chatLoading ? (
+                <Text style={styles.chatBtnText}>...</Text>
+              ) : !canViewFullDetails ? (
+                <>
+                  <Ionicons name="log-in-outline" size={18} color={COLORS.ACCENT} />
+                  <Text style={[styles.chatBtnText, { color: COLORS.ACCENT }]}>Log In</Text>
+                </>
+              ) : (
+                <>
+                  <Ionicons name="chatbubble-outline" size={18} color={COLORS.ACCENT} />
+                  <Text style={[styles.chatBtnText, { color: COLORS.ACCENT }]}>Chat</Text>
+                </>
+              )}
+            </Pressable>
+            {canViewFullDetails && ad.price > 0 && (
+              <Pressable
+                onPress={() => setBuyModalVisible(true)}
+                style={({ pressed }) => [styles.buyBtn, pressed && { opacity: 0.85 }]}
+                accessibilityLabel="Buy now"
+              >
+                <Ionicons name="shield-checkmark-outline" size={18} color={COLORS.TEXT_ON_ACCENT} />
+                <Text style={styles.buyBtnText}>Buy Now · {ad.price.toLocaleString()} ETB</Text>
+              </Pressable>
             )}
-          </Pressable>
+          </View>
         </View>
       )}
+
+      {/* Buy Now Modal */}
+      <Modal visible={buyModalVisible} animationType="slide" transparent onRequestClose={() => setBuyModalVisible(false)}>
+        <Pressable style={styles.modalOverlay} onPress={() => setBuyModalVisible(false)}>
+          <Pressable style={[styles.modalSheet, { paddingBottom: insets.bottom + 20 }]} onPress={() => {}}>
+            <View style={styles.modalHandle} />
+            <Text style={styles.modalTitle}>Secure Purchase</Text>
+            <Text style={styles.modalSubtitle}>
+              Your payment is held safely until you confirm delivery. Seller receives funds 8 hours after delivery.
+            </Text>
+
+            <View style={styles.modalAmountRow}>
+              <Text style={styles.modalAmountLabel}>Total amount</Text>
+              <Text style={styles.modalAmountValue}>{ad?.price.toLocaleString()} ETB</Text>
+            </View>
+            <View style={styles.modalAmountRow}>
+              <Text style={styles.modalAmountLabel}>You receive after delivery</Text>
+              <Text style={[styles.modalAmountValue, { color: COLORS.SUCCESS_GREEN }]}>
+                {ad ? Math.round(ad.price * 0.905).toLocaleString() : 0} ETB (seller gets 90.5%)
+              </Text>
+            </View>
+
+            <Text style={[styles.modalSubtitle, { marginTop: 8 }]}>Payment method</Text>
+            {(['CHAPA', 'TELEBIRR'] as EscrowPaymentMethod[]).map((m) => (
+              <Pressable
+                key={m}
+                onPress={() => setBuyMethod(m)}
+                style={[styles.methodRow, buyMethod === m && styles.methodRowActive]}
+              >
+                <Ionicons
+                  name={m === 'CHAPA' ? 'card-outline' : 'wallet-outline'}
+                  size={20}
+                  color={buyMethod === m ? COLORS.ACCENT : COLORS.TEXT_MUTED}
+                />
+                <Text style={[styles.methodLabel, buyMethod === m && { color: COLORS.ACCENT }]}>
+                  {m === 'CHAPA' ? 'Chapa (Card / Bank)' : 'Telebirr'}
+                </Text>
+                {buyMethod === m && <Ionicons name="checkmark-circle" size={20} color={COLORS.ACCENT} />}
+              </Pressable>
+            ))}
+
+            <Pressable
+              onPress={handleBuyNow}
+              disabled={buying}
+              style={[styles.confirmBtn, buying && { opacity: 0.6 }]}
+            >
+              {buying
+                ? <ActivityIndicator color={COLORS.TEXT_ON_ACCENT} />
+                : <Text style={styles.confirmBtnText}>Confirm & Pay Securely</Text>
+              }
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       {/* Fullscreen Image Gallery */}
       <Modal visible={galleryVisible} transparent animationType="fade" statusBarTranslucent>
@@ -381,8 +471,24 @@ const styles = StyleSheet.create({
   sellerName: { fontSize: FONT_SIZE.MD, fontWeight: '600', color: COLORS.TEXT_DARK },
   sellerLabel: { fontSize: FONT_SIZE.SM, color: COLORS.TEXT_MUTED },
   bottomBar: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: COLORS.BG_CARD, paddingTop: 12, paddingHorizontal: 20, borderTopWidth: 1, borderTopColor: COLORS.BORDER },
-  chatBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: COLORS.ACCENT, borderRadius: 14, paddingVertical: 16 },
-  chatBtnText: { fontSize: FONT_SIZE.MD, fontWeight: '700', color: COLORS.TEXT_ON_ACCENT },
+  bottomActions: { flexDirection: 'row', gap: 10 },
+  chatBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1.5, borderColor: COLORS.ACCENT, borderRadius: 14, paddingVertical: 14, paddingHorizontal: 20 },
+  chatBtnText: { fontSize: FONT_SIZE.SM, fontWeight: '700', color: COLORS.ACCENT },
+  buyBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: COLORS.ACCENT, borderRadius: 14, paddingVertical: 14 },
+  buyBtnText: { fontSize: FONT_SIZE.SM, fontWeight: '700', color: COLORS.TEXT_ON_ACCENT },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  modalSheet: { backgroundColor: COLORS.BG_CARD, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, gap: 12 },
+  modalHandle: { width: 40, height: 4, backgroundColor: COLORS.BORDER, borderRadius: 2, alignSelf: 'center', marginBottom: 8 },
+  modalTitle: { fontSize: FONT_SIZE.XL, fontWeight: '800', color: COLORS.TEXT_DARK },
+  modalSubtitle: { fontSize: FONT_SIZE.SM, color: COLORS.TEXT_MUTED, lineHeight: 20 },
+  modalAmountRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  modalAmountLabel: { fontSize: FONT_SIZE.SM, color: COLORS.TEXT_MUTED },
+  modalAmountValue: { fontSize: FONT_SIZE.MD, fontWeight: '700', color: COLORS.TEXT_DARK },
+  methodRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderRadius: 12, borderWidth: 1.5, borderColor: COLORS.BORDER },
+  methodRowActive: { borderColor: COLORS.ACCENT, backgroundColor: COLORS.ACCENT_LIGHT },
+  methodLabel: { flex: 1, fontSize: FONT_SIZE.SM, fontWeight: '600', color: COLORS.TEXT_DARK },
+  confirmBtn: { backgroundColor: COLORS.ACCENT, borderRadius: 14, paddingVertical: 16, alignItems: 'center', marginTop: 4 },
+  confirmBtnText: { fontSize: FONT_SIZE.MD, fontWeight: '700', color: COLORS.TEXT_ON_ACCENT },
   galleryOverlay: { flex: 1, backgroundColor: '#000', justifyContent: 'center' },
   galleryCloseBtn: { position: 'absolute', right: 16, zIndex: 10, width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' },
   galleryImageWrap: { width: SCREEN_W, justifyContent: 'center', alignItems: 'center' },
