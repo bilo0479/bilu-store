@@ -4,25 +4,32 @@ export interface TelebirrInitParams {
     totalAmount: string;
     notifyUrl: string;
     returnUrl: string;
-    timeoutExpress: string;
+    timeoutExpress?: string;
 }
 export interface TelebirrInitResult {
     toPayUrl: string;
     txRef: string;
 }
 export declare function initializeTelebirrPayment(params: TelebirrInitParams): Promise<TelebirrInitResult>;
-export interface TelebirrCallbackPayload {
-    outTradeNo: string;
-    tradeNo: string;
-    totalAmount: string;
+export interface TelebirrOrderStatus {
     tradeStatus: string;
-    [key: string]: string;
+    tradeNo?: string;
+}
+export declare function queryTelebirrOrder(merchOrderId: string): Promise<TelebirrOrderStatus>;
+/**
+ * Fields Telebirr POSTs to our notifyUrl after payment.
+ * Field names follow the OpenAPI spec (snake_case).
+ */
+export interface TelebirrCallbackPayload {
+    merch_order_id: string;
+    trade_no?: string;
+    trade_status?: string;
+    total_amount?: string;
+    sign?: string;
+    [key: string]: string | undefined;
 }
 /**
- * Verify Telebirr callback signature.
- * Telebirr signs by concatenating sorted key=value pairs (excluding 'sign') with appKey,
- * then MD5-hashing the result in uppercase.
+ * Verify payment by querying Telebirr directly rather than trusting callback
+ * signature alone. Returns true only when the order status is SUCCESS.
  */
-export declare function verifyTelebirrCallback(params: TelebirrCallbackPayload & {
-    sign?: string;
-}): boolean;
+export declare function verifyTelebirrPayment(merchOrderId: string): Promise<boolean>;

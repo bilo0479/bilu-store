@@ -152,7 +152,7 @@ export const onPaymentInitialize = functions.https.onCall(
         totalAmount: amount.toFixed(2),
         notifyUrl: telebirrCallbackUrl,
         returnUrl,
-        timeoutExpress: "30",
+        timeoutExpress: "30m",
       });
       return { txRef, checkoutUrl: result.toPayUrl };
     } catch (err) {
