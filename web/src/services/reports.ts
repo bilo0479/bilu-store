@@ -1,127 +1,55 @@
-import {
-  collection,
-  doc,
-  getDocs,
-  updateDoc,
-  query,
-  where,
-  orderBy,
-  limit,
-  startAfter,
-  getCountFromServer,
-  serverTimestamp,
-  type DocumentSnapshot,
-} from 'firebase/firestore';
-import { db } from '@/lib/firebase';
-
-export type ReportReasonId =
-  | 'SPAM'
-  | 'PROHIBITED_ITEM'
-  | 'SCAM'
-  | 'WRONG_CATEGORY'
-  | 'DUPLICATE'
-  | 'OFFENSIVE'
-  | 'OTHER';
+/**
+ * Admin reports service — Turso-backed via Convex admin actions.
+ * Reports are now inserted via mobile Convex action and stored in Turso.
+ * For admin review, we query Turso through Convex.
+ */
+import { convex } from '@/lib/convex';
+import { api } from '../../../../convex/_generated/api';
 
 export type ReportStatus = 'PENDING' | 'RESOLVED' | 'DISMISSED';
 
 export interface Report {
-  id: string;
+  id: number;
   reporterId: string;
-  targetType: 'AD' | 'USER';
+  targetType: 'listing' | 'user';
   targetId: string;
-  reason: ReportReasonId;
+  reason: string;
   details: string | null;
-  status: ReportStatus;
-  adminNote: string | null;
   createdAt: number;
-  resolvedAt: number | null;
 }
 
-const REASON_LABELS: Record<ReportReasonId, string> = {
-  SPAM: 'Spam or misleading',
-  PROHIBITED_ITEM: 'Prohibited item',
-  SCAM: 'Suspected scam',
-  WRONG_CATEGORY: 'Wrong category',
-  DUPLICATE: 'Duplicate listing',
-  OFFENSIVE: 'Offensive content',
-  OTHER: 'Other',
-};
-
-export function getReasonLabel(reason: ReportReasonId): string {
-  return REASON_LABELS[reason] ?? reason;
-}
-
-function getFirestore() {
-  if (!db) throw new Error('Firebase Firestore is not initialized');
-  return db;
+export function getReasonLabel(reason: string): string {
+  const labels: Record<string, string> = {
+    SPAM: 'Spam or misleading',
+    PROHIBITED_ITEM: 'Prohibited item',
+    SCAM: 'Suspected scam',
+    WRONG_CATEGORY: 'Wrong category',
+    DUPLICATE: 'Duplicate listing',
+    OFFENSIVE: 'Offensive content',
+    OTHER: 'Other',
+  };
+  return labels[reason] ?? reason;
 }
 
 export async function getActiveReportsCount(): Promise<number> {
-  const firestore = getFirestore();
-  const q = query(
-    collection(firestore, 'reports'),
-    where('status', '==', 'PENDING')
-  );
-  const snapshot = await getCountFromServer(q);
-  return snapshot.data().count;
+  const stats = await convex.action(api.admin.getDashboardStats, {});
+  return (stats as { disputeCount: number }).disputeCount;
 }
 
-export async function getPendingReports(
-  pageSize: number = 20,
-  lastDoc?: DocumentSnapshot
-): Promise<{ reports: Report[]; lastVisible: DocumentSnapshot | null }> {
-  const firestore = getFirestore();
-  let q = query(
-    collection(firestore, 'reports'),
-    where('status', '==', 'PENDING'),
-    orderBy('createdAt', 'desc'),
-    limit(pageSize)
-  );
-
-  if (lastDoc) {
-    q = query(
-      collection(firestore, 'reports'),
-      where('status', '==', 'PENDING'),
-      orderBy('createdAt', 'desc'),
-      startAfter(lastDoc),
-      limit(pageSize)
-    );
-  }
-
-  const snapshot = await getDocs(q);
-  const reports: Report[] = snapshot.docs.map((d) => ({
-    id: d.id,
-    ...d.data(),
-  })) as Report[];
-
-  const lastVisible = snapshot.docs.length > 0
-    ? snapshot.docs[snapshot.docs.length - 1]
-    : null;
-
-  return { reports, lastVisible };
-}
-
-export async function resolveReport(
-  reportId: string,
-  adminNote?: string
-): Promise<void> {
-  const firestore = getFirestore();
-  await updateDoc(doc(firestore, 'reports', reportId), {
-    status: 'RESOLVED',
-    adminNote: adminNote?.trim() || null,
-    resolvedAt: Date.now(),
+// Reports listing delegated to admin.listAuditLogs filtering by 'report' action
+export async function getPendingReports(limit = 20, offset = 0): Promise<Report[]> {
+  const logs = await convex.action(api.admin.listAuditLogs, {
+    action: 'report.create',
+    limit,
+    offset,
   });
-}
-
-export async function dismissReport(
-  reportId: string,
-  adminNote?: string
-): Promise<void> {
-  const firestore = getFirestore();
-  await updateDoc(doc(firestore, 'reports', reportId), {
-    status: 'DISMISSED',
-    adminNote: adminNote?.trim() || null,
-    resolvedAt: Date.now(),
-  });
+  return (logs as Array<Record<string, unknown>>).map((l) => ({
+    id: l.id as number,
+    reporterId: l.actorId as string,
+    targetType: 'listing' as const,
+    targetId: l.targetId as string ?? '',
+    reason: (JSON.parse(l.metadata as string ?? '{}').reason as string) ?? 'OTHER',
+    details: null,
+    createdAt: l.timestamp as number,
+  }));
 }

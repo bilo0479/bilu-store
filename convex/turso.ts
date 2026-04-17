@@ -250,6 +250,92 @@ export async function toggleFavorite(
   return "added";
 }
 
+// ── Admin helpers ─────────────────────────────────────────────────────────────
+
+export async function countUsers(): Promise<number> {
+  const db = getDb();
+  const result = await db.select({ count: sql<number>`count(*)` }).from(schema.users);
+  return result[0]?.count ?? 0;
+}
+
+export async function getListingStats(): Promise<{
+  totalListings: number;
+  pendingListings: number;
+  activeListings: number;
+}> {
+  const db = getDb();
+  const rows = await db.select({
+    status: schema.listings.status,
+    count: sql<number>`count(*)`,
+  }).from(schema.listings).groupBy(schema.listings.status);
+
+  const byStatus = Object.fromEntries(rows.map((r) => [r.status, r.count]));
+  return {
+    totalListings: rows.reduce((s, r) => s + r.count, 0),
+    pendingListings: byStatus["PENDING"] ?? 0,
+    activeListings: byStatus["ACTIVE"] ?? 0,
+  };
+}
+
+export async function countDisputedDeals(): Promise<number> {
+  const db = getDb();
+  const result = await db.select({ count: sql<number>`count(*)` })
+    .from(schema.escrowDeals)
+    .where(eq(schema.escrowDeals.status, "refunded"));
+  return result[0]?.count ?? 0;
+}
+
+export async function getPendingListings(opts: { limit?: number; offset?: number } = {}): Promise<ListingRow[]> {
+  const db = getDb();
+  const rows = await db.select().from(schema.listings)
+    .where(eq(schema.listings.status, "PENDING"))
+    .orderBy(schema.listings.createdAt)
+    .limit(opts.limit ?? 50)
+    .offset(opts.offset ?? 0);
+  return rows.map(mapListing);
+}
+
+export async function getDisputedDeals(opts: { limit?: number; offset?: number } = {}): Promise<EscrowRow[]> {
+  const db = getDb();
+  const rows = await db.select().from(schema.escrowDeals)
+    .where(eq(schema.escrowDeals.status, "refunded"))
+    .orderBy(desc(schema.escrowDeals.createdAt))
+    .limit(opts.limit ?? 50)
+    .offset(opts.offset ?? 0);
+  return rows.map(mapEscrow);
+}
+
+export async function listAuditLogs(opts: {
+  actorId?: string;
+  action?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<Array<{
+  id: number;
+  actorId: string;
+  action: string;
+  targetType?: string | null;
+  targetId?: string | null;
+  metadata?: string | null;
+  timestamp: number;
+}>> {
+  const db = getDb();
+  const conditions = [];
+  if (opts.actorId) conditions.push(eq(schema.auditLogs.actorId, opts.actorId));
+  if (opts.action) conditions.push(eq(schema.auditLogs.action, opts.action));
+
+  const query = db.select().from(schema.auditLogs)
+    .orderBy(desc(schema.auditLogs.timestamp))
+    .limit(opts.limit ?? 50)
+    .offset(opts.offset ?? 0);
+
+  const rows = conditions.length > 0
+    ? await query.where(and(...conditions))
+    : await query;
+
+  return rows;
+}
+
 // ── Audit log ─────────────────────────────────────────────────────────────────
 
 export async function insertAuditLog(input: {
