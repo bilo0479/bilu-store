@@ -58,8 +58,8 @@
     "zod-validation-error": "^3.4.0"
   },
   "dependencies": {
+    "@clerk/clerk-expo": "^2.11.0",
     "@react-native-firebase/app": "^24.0.0",
-    "@react-native-google-signin/google-signin": "^16.1.2",
     "@sentry/react-native": "^8.8.0",
     "@shopify/flash-list": "^2.3.1",
     "algoliasearch": "^5.50.1",
@@ -70,10 +70,10 @@
     "expo-notifications": "~0.32.16",
     "expo-sharing": "^14.0.8",
     "firebase": "^12.10.0",
+    "expo-secure-store": "~14.0.1",
     "nativewind": "^4.2.3",
     "react": "19.1.0",
     "react-native": "0.81.5",
-    "react-native-fbsdk-next": "^13.4.3",
     "react-native-webview": "^13.16.1",
     "zustand": "^5.0.11"
   }

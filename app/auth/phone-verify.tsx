@@ -5,8 +5,9 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { useSignIn, useUser } from '@clerk/clerk-expo';
 import { COLORS, FONT_SIZE } from '../../src/constants/colors';
-import { loginWithPhone, verifyPhoneCode } from '../../src/services/AuthService';
+import { upsertClerkUser } from '../../src/services/AuthService';
 import { useAuthStore } from '../../src/stores/authStore';
 import { useUiStore } from '../../src/stores/uiStore';
 
@@ -19,11 +20,15 @@ export default function PhoneVerifyScreen() {
   const setUser = useAuthStore(s => s.setUser);
   const showToast = useUiStore(s => s.showToast);
 
+  const { signIn, setActive, isLoaded } = useSignIn();
+  const { user: clerkUser } = useUser();
+
   const [step, setStep] = useState<Step>('phone');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [sending, setSending] = useState(false);
 
-  const [verificationId, setVerificationId] = useState('');
+  // phoneNumberId is returned by Clerk when OTP is requested
+  const [phoneNumberId, setPhoneNumberId] = useState('');
   const [otp, setOtp] = useState<string[]>(Array(OTP_LENGTH).fill(''));
   const [verifying, setVerifying] = useState(false);
 
@@ -43,16 +48,37 @@ export default function PhoneVerifyScreen() {
       setError('Enter number in international format: +251912345678');
       return;
     }
+    if (!isLoaded) return;
+
     setSending(true);
     setError('');
     try {
-      const id = await loginWithPhone(phone);
-      setVerificationId(id);
+      // Create a sign-in attempt with the phone number as identifier
+      await signIn.create({ identifier: phone });
+
+      // Find the phone_code first factor
+      const phoneFactor = signIn.supportedFirstFactors?.find(
+        (f) => f.strategy === 'phone_code'
+      );
+
+      if (!phoneFactor || !('phoneNumberId' in phoneFactor)) {
+        setError('Phone sign-in is not available. Please use email or Google.');
+        return;
+      }
+
+      const pid = (phoneFactor as { phoneNumberId: string }).phoneNumberId;
+      setPhoneNumberId(pid);
+
+      await signIn.prepareFirstFactor({
+        strategy: 'phone_code',
+        phoneNumberId: pid,
+      });
+
       setStep('otp');
       showToast('Code sent to ' + phone);
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Failed to send code';
-      setError(msg);
+    } catch {
+      // Generic message — never reveal whether a phone number is registered
+      setError('Failed to send verification code. Please try again.');
     } finally {
       setSending(false);
     }
@@ -81,16 +107,33 @@ export default function PhoneVerifyScreen() {
       setError('Please enter the full 6-digit code');
       return;
     }
+    if (!isLoaded) return;
+
     setVerifying(true);
     setError('');
     try {
-      const user = await verifyPhoneCode(verificationId, code);
-      setUser(user);
-      showToast('Phone verified!');
-      router.replace('/(tabs)');
+      const result = await signIn.attemptFirstFactor({
+        strategy: 'phone_code',
+        code,
+      });
+
+      if (result.status === 'complete') {
+        await setActive({ session: result.createdSessionId });
+        const userId = result.createdUserId ?? clerkUser?.id;
+        if (userId) {
+          const user = await upsertClerkUser(userId, {
+            phone: phoneNumber.trim(),
+          });
+          setUser(user);
+        }
+        showToast('Phone verified!');
+        router.replace('/(tabs)');
+      } else {
+        setError('Verification could not be completed. Please try again.');
+      }
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Invalid code. Try again.';
-      setError(msg);
+      // Do not log OTP codes or internal error details
+      setError('Invalid code. Please check and try again.');
     } finally {
       setVerifying(false);
     }
@@ -98,6 +141,7 @@ export default function PhoneVerifyScreen() {
 
   const handleResend = () => {
     setOtp(Array(OTP_LENGTH).fill(''));
+    setPhoneNumberId('');
     setError('');
     setStep('phone');
   };

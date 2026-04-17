@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
 import {
   View, Text, TextInput, StyleSheet, Pressable,
-  ActivityIndicator, KeyboardAvoidingView, Platform, NativeModules,
+  ActivityIndicator, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { useSignIn, useOAuth, useUser } from '@clerk/clerk-expo';
 import { COLORS, FONT_SIZE } from '../../src/constants/colors';
-import { loginUser, loginWithGoogle, loginWithGoogleWeb, loginWithFacebook, loginWithFacebookWeb } from '../../src/services/AuthService';
+import { upsertClerkUser } from '../../src/services/AuthService';
 import { useAuthStore } from '../../src/stores/authStore';
 import { useUiStore } from '../../src/stores/uiStore';
 
@@ -24,12 +25,15 @@ export default function LoginScreen() {
   const setUser = useAuthStore(s => s.setUser);
   const showToast = useUiStore(s => s.showToast);
 
+  const { signIn, setActive, isLoaded } = useSignIn();
+  const { startOAuthFlow } = useOAuth({ strategy: 'oauth_google' });
+  const { user: clerkUser } = useUser();
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
-  const [fbLoading, setFbLoading] = useState(false);
   const [error, setError] = useState('');
 
   const handleLogin = async () => {
@@ -37,19 +41,39 @@ export default function LoginScreen() {
       setError('Please fill in all fields');
       return;
     }
+    if (!isLoaded) return;
+
     setLoading(true);
     setError('');
     try {
-      const user = await loginUser(email.trim(), password);
-      setUser(user);
-      showToast('Welcome back!');
-      goAfterAuth();
+      const result = await signIn.create({
+        identifier: email.trim(),
+        password,
+      });
+
+      if (result.status === 'complete') {
+        await setActive({ session: result.createdSessionId });
+        // upsertClerkUser writes/updates the Firestore profile doc
+        const userId = result.createdUserId ?? clerkUser?.id;
+        if (userId) {
+          const user = await upsertClerkUser(userId, {
+            email: email.trim(),
+          });
+          setUser(user);
+        }
+        showToast('Welcome back!');
+        goAfterAuth();
+      } else {
+        // Clerk may require additional verification steps in some configurations
+        setError('Sign-in could not be completed. Please try again.');
+      }
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Login failed';
-      if (msg.includes('user-not-found') || msg.includes('wrong-password') || msg.includes('invalid-credential')) {
+      const msg = e instanceof Error ? e.message : '';
+      // Generic message — never confirm whether an email is registered
+      if (msg.toLowerCase().includes('invalid') || msg.toLowerCase().includes('incorrect')) {
         setError('Invalid email or password');
       } else {
-        setError(msg);
+        setError('Sign-in failed. Please try again.');
       }
     } finally {
       setLoading(false);
@@ -60,70 +84,30 @@ export default function LoginScreen() {
     setGoogleLoading(true);
     setError('');
     try {
-      let user;
-      if (Platform.OS === 'web') {
-        // Web: Firebase popup — no native SDK needed
-        user = await loginWithGoogleWeb();
-      } else {
-        // Guard: RNGoogleSignin must be registered in the native binary.
-        // It is present only in custom / EAS builds, NOT in Expo Go.
-        // Adding "@react-native-google-signin/google-signin" to app.json plugins
-        // and running `eas build` (or `expo run:android`) makes it available.
-        if (!NativeModules.RNGoogleSignin) {
-          setError(
-            'Google Sign-In requires a native build.\n' +
-            'Run: eas build --profile development, then reload the app.'
-          );
-          return;
+      const { createdSessionId, setActive: setOAuthActive, createdUserId, signUp } = await startOAuthFlow();
+
+      if (createdSessionId) {
+        await setOAuthActive!({ session: createdSessionId });
+        const userId = createdUserId ?? clerkUser?.id;
+        if (userId) {
+          const user = await upsertClerkUser(userId, {
+            name: signUp?.firstName ?? clerkUser?.fullName ?? 'User',
+            email: clerkUser?.primaryEmailAddress?.emailAddress ?? null,
+            avatar: clerkUser?.imageUrl ?? null,
+          });
+          setUser(user);
         }
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const { GoogleSignin } = require('@react-native-google-signin/google-signin') as typeof import('@react-native-google-signin/google-signin');
-        await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
-        const signInResult = await GoogleSignin.signIn();
-        const idToken = signInResult.data?.idToken;
-        if (!idToken) throw new Error(
-          'Google sign-in did not return an ID token. ' +
-          'Ensure EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID is set and offlineAccess is enabled in GoogleSignin.configure().'
-        );
-        user = await loginWithGoogle(idToken);
+        showToast('Welcome!');
+        goAfterAuth();
       }
-      setUser(user);
-      showToast('Welcome!');
-      goAfterAuth();
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Google sign-in failed';
-      if (!msg.includes('SIGN_IN_CANCELLED')) setError(msg);
+      // Don't show error for user-cancelled flows
+      if (!msg.toLowerCase().includes('cancel')) {
+        setError('Google sign-in failed. Please try again.');
+      }
     } finally {
       setGoogleLoading(false);
-    }
-  };
-
-  const handleFacebookLogin = async () => {
-    setFbLoading(true);
-    setError('');
-    try {
-      let user;
-      if (Platform.OS === 'web') {
-        // Web: Firebase popup — no native SDK needed
-        user = await loginWithFacebookWeb();
-      } else {
-        // Native: FBSDK (requires native build)
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const { LoginManager, AccessToken } = require('react-native-fbsdk-next') as typeof import('react-native-fbsdk-next');
-        const result = await LoginManager.logInWithPermissions(['public_profile', 'email']);
-        if (result.isCancelled) return;
-        const tokenData = await AccessToken.getCurrentAccessToken();
-        if (!tokenData?.accessToken) throw new Error('Facebook did not return an access token');
-        user = await loginWithFacebook(tokenData.accessToken);
-      }
-      setUser(user);
-      showToast('Welcome!');
-      goAfterAuth();
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Facebook login failed';
-      setError(msg);
-    } finally {
-      setFbLoading(false);
     }
   };
 
@@ -229,19 +213,6 @@ export default function LoginScreen() {
               <Ionicons name="logo-google" size={20} color={COLORS.ACCENT} />
             )}
             <Text style={styles.socialBtnText}>Continue with Google</Text>
-          </Pressable>
-
-          <Pressable
-            onPress={handleFacebookLogin}
-            disabled={fbLoading}
-            style={({ pressed }) => [styles.socialBtn, styles.fbBtn, pressed && { opacity: 0.85 }]}
-          >
-            {fbLoading ? (
-              <ActivityIndicator size="small" color={COLORS.TEXT_ON_ACCENT} />
-            ) : (
-              <Ionicons name="logo-facebook" size={20} color={COLORS.TEXT_ON_ACCENT} />
-            )}
-            <Text style={[styles.socialBtnText, styles.fbBtnText]}>Continue with Facebook</Text>
           </Pressable>
         </View>
 
@@ -392,12 +363,5 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZE.MD,
     fontWeight: '600',
     color: COLORS.ACCENT,
-  },
-  fbBtn: {
-    backgroundColor: '#1877F2',
-    borderColor: '#1877F2',
-  },
-  fbBtnText: {
-    color: COLORS.TEXT_ON_ACCENT,
   },
 });

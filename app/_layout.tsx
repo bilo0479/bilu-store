@@ -8,6 +8,8 @@ import {
   Inter_700Bold,
   useFonts,
 } from "@expo-google-fonts/inter";
+import { ClerkProvider, useAuth, useUser } from "@clerk/clerk-expo";
+import * as SecureStore from "expo-secure-store";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
@@ -41,11 +43,25 @@ import { ErrorBoundary } from "../src/components/ErrorBoundary";
 import { Toast } from "../src/components/Toast";
 import { useAuthStore } from "../src/stores/authStore";
 import { useUiStore } from "../src/stores/uiStore";
-import { onAuthChange, fetchUserProfile, logoutUser, consumeRedirectIntent } from "../src/services/AuthService";
+import { fetchUserProfile, consumeRedirectIntent } from "../src/services/AuthService";
 import { COLORS, FONT_SIZE } from "../src/constants/colors";
 import { useNetworkStatus } from "../src/hooks/useNetworkStatus";
 
 SplashScreen.preventAutoHideAsync();
+
+// SecureStore token cache for Clerk — tokens are stored in the device keychain,
+// never in AsyncStorage (which is unencrypted).
+const tokenCache = {
+  async getToken(key: string) {
+    return SecureStore.getItemAsync(key);
+  },
+  async saveToken(key: string, value: string) {
+    return SecureStore.setItemAsync(key, value);
+  },
+  async clearToken(key: string) {
+    return SecureStore.deleteItemAsync(key);
+  },
+};
 
 // Native-only: react-native-keyboard-controller has no web support
 // Lazily require so the web bundle never touches the native module
@@ -59,54 +75,43 @@ if (Platform.OS !== 'web') {
   }
 }
 
-// Native-only: configure Google Sign-In SDK (Android / iOS builds only).
-// NativeModules.RNGoogleSignin is only present in custom / EAS builds where
-// the plugin has been compiled in. Skip silently in Expo Go or web.
-if (Platform.OS !== 'web') {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const mod = require('@react-native-google-signin/google-signin') as typeof import('@react-native-google-signin/google-signin') | undefined;
-    if (mod?.GoogleSignin) {
-      const webClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ?? '';
-      if (!webClientId) {
-        console.warn('[GoogleSignin] EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID is not set. Google Sign-In will fail to return an idToken.');
-      }
-      mod.GoogleSignin.configure({
-        webClientId,
-        offlineAccess: true, // Required to receive idToken on Android
-      });
-    }
-  } catch {
-    // Native module not compiled into this build — sign-in button will show a clear error.
-  }
-}
-
 const queryClient = new QueryClient();
 
-function AuthSessionProvider({ children }: { children: React.ReactNode }) {
+/**
+ * ClerkAuthSync — replaces the old Firebase-based AuthSessionProvider.
+ *
+ * Listens to Clerk's auth state via `useAuth()` and keeps the Zustand
+ * authStore in sync. Also handles banned-user detection and post-login
+ * redirect intent consumption.
+ */
+function ClerkAuthSync({ children }: { children: React.ReactNode }) {
+  const { isSignedIn, userId, isLoaded, signOut } = useAuth();
   const setUser = useAuthStore(s => s.setUser);
   const setLoading = useAuthStore(s => s.setLoading);
   const showToast = useUiStore(s => s.showToast);
 
   useEffect(() => {
-    setLoading(true);
-    const unsub = onAuthChange(async (firebaseUser) => {
-      if (firebaseUser) {
-        try {
-          const profile = await fetchUserProfile(firebaseUser.uid);
+    if (!isLoaded) {
+      setLoading(true);
+      return;
+    }
 
+    if (isSignedIn && userId) {
+      setLoading(true);
+      fetchUserProfile(userId)
+        .then(async (profile) => {
           // Banned user detection
-          if (profile && profile.banned) {
-            await logoutUser();
+          if (profile?.banned) {
+            await signOut();
             setUser(null);
             showToast('Your account has been suspended. Contact support.');
             return;
           }
 
-          // profile may be null for brand-new social auth users whose Firestore
-          // doc hasn't been written yet (race between signInWithCredential and
-          // upsertSocialUser). Don't call setUser(null) — the login handler's
-          // setUser(user) call already set the correct state.
+          // profile may be null for brand-new users whose Firestore doc hasn't
+          // been written yet (race with upsertClerkUser in the auth screen).
+          // Don't call setUser(null) — the login handler's setUser(user) call
+          // already set the correct state.
           if (profile) {
             setUser(profile);
             const redirectRoute = await consumeRedirectIntent();
@@ -116,15 +121,14 @@ function AuthSessionProvider({ children }: { children: React.ReactNode }) {
               }, 100);
             }
           }
-        } catch {
-          setUser(null);
-        }
-      } else {
-        setUser(null);
-      }
-    });
-    return unsub;
-  }, []);
+        })
+        .catch(() => setUser(null))
+        .finally(() => setLoading(false));
+    } else {
+      setUser(null);
+      setLoading(false);
+    }
+  }, [isSignedIn, userId, isLoaded]);
 
   return <>{children}</>;
 }
@@ -204,30 +208,35 @@ export default function RootLayout() {
   if (!fontsLoaded && !fontError) return null;
 
   return (
-    <SafeAreaProvider>
-      <ErrorBoundary>
-        <QueryClientProvider client={queryClient}>
-          <GestureHandlerRootView style={{ flex: 1 }}>
-            {KeyboardProvider ? (
-              <KeyboardProvider>
-                <AuthSessionProvider>
+    <ClerkProvider
+      publishableKey={process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY!}
+      tokenCache={tokenCache}
+    >
+      <SafeAreaProvider>
+        <ErrorBoundary>
+          <QueryClientProvider client={queryClient}>
+            <GestureHandlerRootView style={{ flex: 1 }}>
+              {KeyboardProvider ? (
+                <KeyboardProvider>
+                  <ClerkAuthSync>
+                    <StatusBar style="dark" />
+                    <OfflineBanner />
+                    <RootLayoutNav />
+                    <Toast />
+                  </ClerkAuthSync>
+                </KeyboardProvider>
+              ) : (
+                <ClerkAuthSync>
                   <StatusBar style="dark" />
                   <OfflineBanner />
                   <RootLayoutNav />
                   <Toast />
-                </AuthSessionProvider>
-              </KeyboardProvider>
-            ) : (
-              <AuthSessionProvider>
-                <StatusBar style="dark" />
-                <OfflineBanner />
-                <RootLayoutNav />
-                <Toast />
-              </AuthSessionProvider>
-            )}
-          </GestureHandlerRootView>
-        </QueryClientProvider>
-      </ErrorBoundary>
-    </SafeAreaProvider>
+                </ClerkAuthSync>
+              )}
+            </GestureHandlerRootView>
+          </QueryClientProvider>
+        </ErrorBoundary>
+      </SafeAreaProvider>
+    </ClerkProvider>
   );
 }

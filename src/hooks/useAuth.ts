@@ -1,3 +1,10 @@
+/**
+ * useAuth hook — P2 Clerk migration
+ *
+ * Auth state is kept in Zustand (authStore) and is synced from Clerk by the
+ * ClerkAuthSync component in app/_layout.tsx. This hook simply reads from the
+ * store — no Firebase or Clerk imports needed here.
+ */
 import { useEffect } from 'react';
 import { router } from 'expo-router';
 import { useAuthStore } from '../stores/authStore';

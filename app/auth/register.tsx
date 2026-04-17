@@ -6,8 +6,9 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { useSignUp } from '@clerk/clerk-expo';
 import { COLORS, FONT_SIZE } from '../../src/constants/colors';
-import { registerUser } from '../../src/services/AuthService';
+import { upsertClerkUser } from '../../src/services/AuthService';
 import { useAuthStore } from '../../src/stores/authStore';
 import { useUiStore } from '../../src/stores/uiStore';
 
@@ -16,6 +17,8 @@ export default function RegisterScreen() {
   const setUser = useAuthStore(s => s.setUser);
   const showToast = useUiStore(s => s.showToast);
 
+  const { signUp, setActive, isLoaded } = useSignUp();
+
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -23,6 +26,8 @@ export default function RegisterScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  // When Clerk requires email verification before completing signup
+  const [awaitingVerification, setAwaitingVerification] = useState(false);
 
   const handleRegister = async () => {
     if (!name.trim() || !email.trim() || !password.trim()) {
@@ -33,28 +38,73 @@ export default function RegisterScreen() {
       setError('Passwords do not match');
       return;
     }
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters');
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters');
       return;
     }
+    if (!isLoaded) return;
+
     setLoading(true);
     setError('');
     try {
-      const user = await registerUser(email.trim(), password, name.trim());
-      setUser(user);
-      showToast('Account created!');
-      router.back();
+      const result = await signUp.create({
+        emailAddress: email.trim(),
+        password,
+        firstName: name.trim(),
+      });
+
+      if (result.status === 'complete') {
+        await setActive({ session: result.createdSessionId });
+        const userId = result.createdUserId;
+        if (userId) {
+          const user = await upsertClerkUser(userId, {
+            name: name.trim(),
+            email: email.trim(),
+          });
+          setUser(user);
+        }
+        showToast('Account created!');
+        router.back();
+      } else if (result.status === 'missing_requirements') {
+        // Clerk dashboard has email verification enabled — prompt user to check email
+        await signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
+        setAwaitingVerification(true);
+        setError('');
+        showToast('Check your email for a verification code.');
+      } else {
+        setError('Registration could not be completed. Please try again.');
+      }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Registration failed';
-      if (msg.includes('email-already-in-use')) {
+      if (msg.toLowerCase().includes('already') || msg.toLowerCase().includes('taken')) {
         setError('This email is already registered');
       } else {
-        setError(msg);
+        setError('Registration failed. Please try again.');
       }
     } finally {
       setLoading(false);
     }
   };
+
+  if (awaitingVerification) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top + 40, paddingBottom: insets.bottom + 20, paddingHorizontal: 24, alignItems: 'center', justifyContent: 'center' }]}>
+        <Ionicons name="mail-outline" size={64} color={COLORS.ACCENT} />
+        <Text style={[styles.label, { fontSize: FONT_SIZE.LG, marginTop: 24, textAlign: 'center' }]}>
+          Check your email
+        </Text>
+        <Text style={[styles.label, { fontWeight: '400', color: COLORS.TEXT_MUTED, marginTop: 12, textAlign: 'center' }]}>
+          We sent a verification link to {email}. Click it to complete your registration.
+        </Text>
+        <Pressable
+          onPress={() => { setAwaitingVerification(false); setError(''); }}
+          style={[styles.registerBtn, { marginTop: 32, width: '100%' }]}
+        >
+          <Text style={styles.registerBtnText}>Back to Sign Up</Text>
+        </Pressable>
+      </View>
+    );
+  }
 
   return (
     <KeyboardAvoidingView
@@ -120,7 +170,7 @@ export default function RegisterScreen() {
               <Ionicons name="lock-closed-outline" size={20} color={COLORS.TEXT_MUTED} />
               <TextInput
                 style={styles.input}
-                placeholder="Min. 6 characters"
+                placeholder="Min. 8 characters"
                 placeholderTextColor={COLORS.TEXT_MUTED}
                 value={password}
                 onChangeText={setPassword}
