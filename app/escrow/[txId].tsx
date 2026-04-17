@@ -10,30 +10,30 @@ import { COLORS, FONT_SIZE } from '../../src/constants/colors';
 import { useAuthStore } from '../../src/stores/authStore';
 import { useUiStore } from '../../src/stores/uiStore';
 import {
-  subscribeToEscrow,
-  fetchBuyerOtp,
+  fetchEscrowDeal,
+  fetchBuyerCode,
   verifyDelivery,
   requestRefund,
 } from '../../src/services/EscrowService';
-import type { EscrowTransaction } from '../../src/types';
+import type { EscrowRow } from '@bilustore/shared';
 
 const STATUS_LABEL: Record<string, string> = {
-  pending_payment: 'Awaiting Payment',
-  held:            'Payment Secured',
-  verified:        'Delivery Verified',
-  completed:       'Payment Released',
-  refunded:        'Refunded',
-  disputed:        'Under Review',
+  held:      'Payment Secured',
+  verified:  'Delivery Verified',
+  completed: 'Payment Released',
+  refunded:  'Refunded',
+  disputed:  'Under Review',
 };
 
 const STATUS_COLOR: Record<string, string> = {
-  pending_payment: COLORS.WARNING_AMBER,
-  held:            COLORS.INFO_BLUE,
-  verified:        COLORS.ACCENT,
-  completed:       COLORS.SUCCESS_GREEN,
-  refunded:        COLORS.TEXT_MUTED,
-  disputed:        COLORS.ERROR_RED,
+  held:      COLORS.INFO_BLUE,
+  verified:  COLORS.ACCENT,
+  completed: COLORS.SUCCESS_GREEN,
+  refunded:  COLORS.TEXT_MUTED,
+  disputed:  COLORS.ERROR_RED,
 };
+
+const POLL_INTERVAL_MS = 8000;
 
 export default function EscrowScreen() {
   const { txId } = useLocalSearchParams<{ txId: string }>();
@@ -41,44 +41,59 @@ export default function EscrowScreen() {
   const user = useAuthStore(s => s.user);
   const showToast = useUiStore(s => s.showToast);
 
-  const [tx, setTx] = useState<EscrowTransaction | null>(null);
-  const [buyerOtp, setBuyerOtp] = useState<string | null>(null);
+  const dealId = txId ? parseInt(txId, 10) : null;
+
+  const [tx, setTx] = useState<EscrowRow | null>(null);
+  const [buyerCode, setBuyerCode] = useState<string | null>(null);
   const [otpInput, setOtpInput] = useState('');
   const [loading, setLoading] = useState(true);
   const [verifying, setVerifying] = useState(false);
   const [refunding, setRefunding] = useState(false);
 
+  const loadDeal = useCallback(async () => {
+    if (!dealId) return;
+    const data = await fetchEscrowDeal(dealId);
+    setTx(data);
+    setLoading(false);
+  }, [dealId]);
+
+  // Poll for deal state changes (Convex reactive queries not available in imperative service calls)
   useEffect(() => {
-    if (!txId) return;
-    const unsub = subscribeToEscrow(txId, (data) => {
-      setTx(data);
-      setLoading(false);
-    });
-    return unsub;
-  }, [txId]);
+    loadDeal();
+    const interval = setInterval(loadDeal, POLL_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [loadDeal]);
 
   // Fetch plain OTP for buyer once status is 'held'
   useEffect(() => {
-    if (!tx || !user || tx.status !== 'held' || tx.buyerId !== user.id) return;
-    fetchBuyerOtp(txId!).then(setBuyerOtp).catch(() => {});
-  }, [tx?.status, user?.id, txId]);
+    if (!tx || !user || tx.status !== 'held' || tx.buyerId !== user.id || !dealId) return;
+    fetchBuyerCode(dealId).then(res => setBuyerCode(res?.code ?? null)).catch(() => {});
+  }, [tx?.status, user?.id, dealId]);
 
   const isBuyer = user?.id === tx?.buyerId;
   const isSeller = user?.id === tx?.sellerId;
 
   const handleVerify = useCallback(async () => {
-    if (!otpInput.trim() || !txId) return;
+    if (!otpInput.trim() || !dealId) return;
     setVerifying(true);
     try {
-      const result = await verifyDelivery(txId, otpInput.trim());
+      await verifyDelivery(dealId, otpInput.trim());
       showToast('Delivery confirmed! Payment releases in 8 hours.');
       setOtpInput('');
+      loadDeal();
     } catch (e: unknown) {
-      showToast((e as Error).message ?? 'Verification failed');
+      const msg = (e as { message?: string }).message ?? 'Verification failed';
+      if (msg.includes('wrong_code')) {
+        showToast('Wrong code. Please try again.');
+      } else if (msg.includes('locked_out')) {
+        showToast('Too many attempts. Transaction disputed automatically.');
+      } else {
+        showToast(msg);
+      }
     } finally {
       setVerifying(false);
     }
-  }, [otpInput, txId, showToast]);
+  }, [otpInput, dealId, showToast, loadDeal]);
 
   const handleRefund = useCallback(() => {
     Alert.alert(
@@ -90,10 +105,12 @@ export default function EscrowScreen() {
           text: 'Yes, Refund',
           style: 'destructive',
           onPress: async () => {
+            if (!dealId) return;
             setRefunding(true);
             try {
-              await requestRefund(txId!, 'Buyer requested cancellation');
+              await requestRefund(dealId, 'Buyer requested cancellation');
               showToast('Refund requested. You\'ll receive it in 3–5 business days.');
+              loadDeal();
             } catch (e: unknown) {
               showToast((e as Error).message ?? 'Refund request failed');
             } finally {
@@ -103,7 +120,7 @@ export default function EscrowScreen() {
         },
       ]
     );
-  }, [txId, showToast]);
+  }, [dealId, showToast, loadDeal]);
 
   const formatCountdown = (releaseAt: number | null): string => {
     if (!releaseAt) return '';
@@ -159,12 +176,10 @@ export default function EscrowScreen() {
       {/* Transaction Summary */}
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Transaction Details</Text>
-        <Row label="Item" value={tx.adTitle} />
         <Row label="Total Paid" value={`${tx.amount.toLocaleString()} ETB`} bold />
         <Row label="Seller Receives" value={`${tx.payoutAmount.toLocaleString()} ETB`} />
         <Row label="Platform Fee" value={`${tx.commissionAmount.toLocaleString()} ETB (9.5%)`} />
         <Row label="Payment Method" value={tx.paymentMethod} />
-        <Row label={isBuyer ? 'Seller' : 'Buyer'} value={isBuyer ? tx.sellerName : tx.buyerName} />
       </View>
 
       {/* ── BUYER VIEW ── */}
@@ -177,9 +192,9 @@ export default function EscrowScreen() {
           <Text style={styles.otpSubtext}>
             Show this code to the seller <Text style={{ fontWeight: '700' }}>only after receiving your item</Text>.
           </Text>
-          {buyerOtp ? (
+          {buyerCode ? (
             <View style={styles.otpBox}>
-              <Text style={styles.otpDigits}>{buyerOtp}</Text>
+              <Text style={styles.otpDigits}>{buyerCode}</Text>
             </View>
           ) : (
             <ActivityIndicator color={COLORS.ACCENT} style={{ marginTop: 12 }} />
@@ -190,28 +205,36 @@ export default function EscrowScreen() {
         </View>
       )}
 
-      {isBuyer && tx.status === 'verified' && (
+      {(isBuyer || isSeller) && tx.status === 'verified' && (
         <View style={styles.card}>
           <Ionicons name="time-outline" size={32} color={COLORS.ACCENT} style={{ alignSelf: 'center' }} />
-          <Text style={styles.timerLabel}>Payout Countdown</Text>
+          <Text style={styles.timerLabel}>
+            {isSeller ? 'Payment Releasing In' : 'Payout Countdown'}
+          </Text>
           <Text style={styles.timerValue}>{formatCountdown(tx.payoutReleaseAt)}</Text>
           <Text style={styles.timerSubtext}>
-            Seller will receive payment automatically after the 8-hour window.
+            {isSeller
+              ? `${tx.payoutAmount.toLocaleString()} ETB will be sent to your account automatically.`
+              : 'Seller will receive payment automatically after the 8-hour window.'}
           </Text>
         </View>
       )}
 
-      {isBuyer && tx.status === 'completed' && (
+      {tx.status === 'completed' && (
         <View style={[styles.card, styles.successCard]}>
           <Ionicons name="checkmark-circle" size={40} color={COLORS.SUCCESS_GREEN} style={{ alignSelf: 'center' }} />
-          <Text style={styles.successText}>Transaction Complete</Text>
+          <Text style={styles.successText}>
+            {isSeller ? 'Payment Sent!' : 'Transaction Complete'}
+          </Text>
           <Text style={styles.successSubtext}>
-            Payment has been released to the seller. Enjoy your purchase!
+            {isSeller
+              ? `${tx.payoutAmount.toLocaleString()} ETB has been sent to your payout account.`
+              : 'Payment has been released to the seller. Enjoy your purchase!'}
           </Text>
         </View>
       )}
 
-      {/* ── SELLER VIEW ── */}
+      {/* ── SELLER CODE ENTRY ── */}
       {isSeller && tx.status === 'held' && (
         <View style={styles.card}>
           <View style={styles.otpHeader}>
@@ -219,7 +242,7 @@ export default function EscrowScreen() {
             <Text style={styles.cardTitle}>Confirm Delivery</Text>
           </View>
           <Text style={styles.otpSubtext}>
-            Ask the buyer for their 6-digit delivery code and enter it below to confirm delivery.
+            Ask the buyer for their 6-digit delivery code and enter it below.
           </Text>
           <TextInput
             style={styles.otpInput}
@@ -243,27 +266,6 @@ export default function EscrowScreen() {
         </View>
       )}
 
-      {isSeller && tx.status === 'verified' && (
-        <View style={styles.card}>
-          <Ionicons name="time-outline" size={32} color={COLORS.ACCENT} style={{ alignSelf: 'center' }} />
-          <Text style={styles.timerLabel}>Payment Releasing In</Text>
-          <Text style={styles.timerValue}>{formatCountdown(tx.payoutReleaseAt)}</Text>
-          <Text style={styles.timerSubtext}>
-            {tx.payoutAmount.toLocaleString()} ETB will be sent to your account automatically.
-          </Text>
-        </View>
-      )}
-
-      {isSeller && tx.status === 'completed' && (
-        <View style={[styles.card, styles.successCard]}>
-          <Ionicons name="checkmark-circle" size={40} color={COLORS.SUCCESS_GREEN} style={{ alignSelf: 'center' }} />
-          <Text style={styles.successText}>Payment Sent!</Text>
-          <Text style={styles.successSubtext}>
-            {tx.payoutAmount.toLocaleString()} ETB has been sent to your payout account.
-          </Text>
-        </View>
-      )}
-
       {/* Refund button (buyer only, when held) */}
       {isBuyer && tx.status === 'held' && (
         <Pressable
@@ -278,7 +280,6 @@ export default function EscrowScreen() {
         </Pressable>
       )}
 
-      {/* Disputed state */}
       {tx.status === 'disputed' && (
         <View style={[styles.card, { borderColor: COLORS.ERROR_RED, borderWidth: 1 }]}>
           <Ionicons name="warning-outline" size={28} color={COLORS.ERROR_RED} style={{ alignSelf: 'center' }} />
@@ -317,9 +318,7 @@ const styles = StyleSheet.create({
   },
   statusDot: { width: 10, height: 10, borderRadius: 5 },
   statusText: { fontSize: FONT_SIZE.MD, fontWeight: '700' },
-  card: {
-    backgroundColor: COLORS.BG_CARD, borderRadius: 16, padding: 16, gap: 10,
-  },
+  card: { backgroundColor: COLORS.BG_CARD, borderRadius: 16, padding: 16, gap: 10 },
   cardTitle: { fontSize: FONT_SIZE.LG, fontWeight: '700', color: COLORS.TEXT_DARK },
   row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   rowLabel: { fontSize: FONT_SIZE.SM, color: COLORS.TEXT_MUTED },

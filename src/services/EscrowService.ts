@@ -1,86 +1,54 @@
-import { getFunctions, httpsCallable } from 'firebase/functions';
-import { doc, getDoc, onSnapshot } from 'firebase/firestore';
-import { app, db } from '../config/firebase';
-import type {
-  EscrowTransaction,
-  InitiateEscrowResult,
-  VerifyDeliveryResult,
-  EscrowPaymentMethod,
-  PayoutAccount,
-} from '../types';
+/**
+ * EscrowService — routed through Convex actions → Turso.
+ * Firebase/Firestore references removed.
+ */
+import { ConvexReactClient } from "convex/react";
+import { api } from "../../convex/_generated/api";
+import type { EscrowRow } from "@bilustore/shared";
 
-function fns() {
-  if (!app) throw new Error('Firebase not configured');
-  return getFunctions(app);
+let _client: ConvexReactClient | null = null;
+
+export function setConvexClient(client: ConvexReactClient) {
+  _client = client;
+}
+
+function client(): ConvexReactClient {
+  if (!_client) throw new Error("Convex client not initialised");
+  return _client;
 }
 
 export async function initiateEscrow(
-  adId: string,
-  paymentMethod: EscrowPaymentMethod
-): Promise<InitiateEscrowResult> {
-  const fn = httpsCallable<
-    { adId: string; paymentMethod: EscrowPaymentMethod },
-    InitiateEscrowResult
-  >(fns(), 'onInitiateEscrow');
-  const result = await fn({ adId, paymentMethod });
-  return result.data;
+  listingId: number,
+  paymentMethod: "CHAPA" | "TELEBIRR",
+): Promise<{ dealId: number; checkoutUrl: string }> {
+  return client().action(api.escrow.initiate, { listingId, paymentMethod });
 }
 
 export async function verifyDelivery(
-  txId: string,
-  otpCode: string
-): Promise<VerifyDeliveryResult> {
-  const fn = httpsCallable<
-    { txId: string; otpCode: string },
-    VerifyDeliveryResult
-  >(fns(), 'onVerifyDelivery');
-  const result = await fn({ txId, otpCode });
-  return result.data;
+  dealId: number,
+  code: string,
+): Promise<{ payoutReleaseAt: number }> {
+  return client().action(api.escrow.verify, { dealId, code });
 }
 
-export async function requestRefund(
-  txId: string,
-  reason?: string
-): Promise<void> {
-  const fn = httpsCallable<{ txId: string; reason?: string }, unknown>(
-    fns(),
-    'onRequestRefund'
-  );
-  await fn({ txId, reason });
+export async function requestRefund(dealId: number, reason: string): Promise<void> {
+  await client().action(api.escrow.dispute, { dealId, reason });
 }
 
-export async function fetchEscrowTransaction(txId: string): Promise<EscrowTransaction | null> {
-  if (!db) return null;
-  const snap = await getDoc(doc(db, 'escrow_transactions', txId));
-  if (!snap.exists()) return null;
-  return { id: snap.id, ...snap.data() } as EscrowTransaction;
+export async function fetchEscrowDeal(dealId: number): Promise<EscrowRow | null> {
+  try {
+    return await client().action(api.escrow.getDeal, { dealId });
+  } catch {
+    return null;
+  }
 }
 
-/** Fetch the buyer's plain OTP (only works if caller is the buyer) */
-export async function fetchBuyerOtp(txId: string): Promise<string | null> {
-  if (!db) return null;
-  const snap = await getDoc(doc(db, 'escrow_otps', txId));
-  if (!snap.exists()) return null;
-  return (snap.data().otp as string) ?? null;
-}
-
-export function subscribeToEscrow(
-  txId: string,
-  onData: (tx: EscrowTransaction | null) => void
-): () => void {
-  if (!db) return () => {};
-  return onSnapshot(doc(db, 'escrow_transactions', txId), (snap) => {
-    if (!snap.exists()) { onData(null); return; }
-    onData({ id: snap.id, ...snap.data() } as EscrowTransaction);
-  });
-}
-
-/** Save seller's payout account to their user profile */
-export async function savePayoutAccount(
-  userId: string,
-  account: PayoutAccount
-): Promise<void> {
-  if (!db) throw new Error('Firebase not configured');
-  const { updateDoc, doc: firestoreDoc } = await import('firebase/firestore');
-  await updateDoc(firestoreDoc(db, 'users', userId), { payoutAccount: account });
+export async function fetchBuyerCode(
+  dealId: number,
+): Promise<{ code: string; expiresAt: number } | null> {
+  try {
+    return await client().action(api.escrow.getBuyerCode, { dealId });
+  } catch {
+    return null;
+  }
 }

@@ -19,6 +19,14 @@ crons.hourly(
   {},
 );
 
+// Prune expired escrow codes every 5 minutes
+crons.interval(
+  "escrowCodes.prune",
+  { minutes: 5 },
+  internal.escrow.pruneExpiredCodes,
+  {},
+);
+
 // P7 adds: intel.rebuildTrustScores
 // P9 adds: pro.expirePlans
 

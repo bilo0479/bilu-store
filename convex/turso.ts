@@ -181,6 +181,20 @@ export async function txRefund(
     .where(and(eq(schema.escrowDeals.id, dealId), eq(schema.escrowDeals.status, "held")));
 }
 
+export async function updateEscrowTxRef(dealId: number, txRef: string): Promise<void> {
+  const db = getDb();
+  await db.update(schema.escrowDeals)
+    .set({ paymentTxRef: txRef })
+    .where(eq(schema.escrowDeals.id, dealId));
+}
+
+export async function markEscrowCompleted(dealId: number): Promise<void> {
+  const db = getDb();
+  await db.update(schema.escrowDeals)
+    .set({ status: "completed", completedAt: Date.now() })
+    .where(eq(schema.escrowDeals.id, dealId));
+}
+
 export async function incrementFailedVerify(dealId: number): Promise<number> {
   const db = getDb();
   const result = await db.update(schema.escrowDeals)
@@ -317,6 +331,7 @@ function mapUser(row: typeof schema.users.$inferSelect): UserRow {
     banned: row.banned === 1,
     createdAt: row.createdAt,
     lastLoginAt: row.lastLoginAt,
+    payoutAccountJson: row.payoutAccountJson ?? null,
   };
 }
 
