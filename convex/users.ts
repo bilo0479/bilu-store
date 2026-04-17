@@ -3,6 +3,7 @@ import { v, ConvexError } from "convex/values";
 import { assertAuth } from "./helpers/assertAuth";
 import { assertAdmin } from "./helpers/assertAdmin";
 import { requireReauth } from "./helpers/requireReauth";
+import { withRateLimit } from "./helpers/withRateLimit";
 import { audit } from "./helpers/audit";
 import * as turso from "./turso";
 import Clerk from "@clerk/clerk-sdk-node";
@@ -29,6 +30,7 @@ export const updateProfile = action({
   },
   handler: async (ctx, args) => {
     const userId = await assertAuth(ctx);
+    await withRateLimit(ctx, `user.updateProfile:${userId}`, 10);
     await turso.updateUser(userId, {
       ...(args.name && { name: args.name }),
       ...(args.city !== undefined && { city: args.city }),

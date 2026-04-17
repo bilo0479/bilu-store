@@ -22,15 +22,34 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { router } from "expo-router";
 
+const PII_RE = /(\+?2519\d{8}|\b\d{10}\b|[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g;
+function scrubStr(s: string) { return s.replace(PII_RE, "[redacted]"); }
+function scrubObj(v: unknown): unknown {
+  if (typeof v === "string") return scrubStr(v);
+  if (Array.isArray(v)) return v.map(scrubObj);
+  if (v && typeof v === "object")
+    return Object.fromEntries(Object.entries(v as Record<string, unknown>).map(([k, val]) => [k, scrubObj(val)]));
+  return v;
+}
+
 Sentry.init({
   dsn: process.env.EXPO_PUBLIC_SENTRY_DSN,
   tracesSampleRate: 0.2,
   enabled: !__DEV__,
   beforeSend(event) {
-    // Strip PII from events — full scrub in P11; this is the hook point
     if (event.user) {
       delete event.user.email;
       delete event.user.ip_address;
+      delete event.user.username;
+    }
+    if (event.request?.data) event.request.data = scrubObj(event.request.data);
+    if (event.extra) event.extra = scrubObj(event.extra) as typeof event.extra;
+    if (event.breadcrumbs?.values) {
+      event.breadcrumbs.values = event.breadcrumbs.values.map((b) => ({
+        ...b,
+        message: b.message ? scrubStr(b.message) : b.message,
+        data: b.data ? (scrubObj(b.data) as typeof b.data) : b.data,
+      }));
     }
     return event;
   },
