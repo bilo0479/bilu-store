@@ -41,7 +41,10 @@
       "Bash(pnpm add:*)",
       "Bash(npm uninstall:*)",
       "Bash(pnpm typecheck:*)",
-      "Bash(npm run:*)"
+      "Bash(npm run:*)",
+      "Bash(powershell *)",
+      "Bash(robocopy \"D:/Projects/Bilu Store/.empty_tmp\" \"D:/Projects/Bilu Store/.worktrees\" /MIR /NFL /NDL /NJH /NJS)",
+      "Bash(cmd /c \"rmdir /s /q \\\\\"D:\\\\Projects\\\\Bilu Store\\\\.worktrees\\\\\"\")"
     ]
   }
 }

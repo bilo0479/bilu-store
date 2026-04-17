@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "skills": {
+    "doc-coauthoring": {
+      "source": "robotka1321/great-product-skills",
+      "sourceType": "github",
+      "computedHash": "62cd7744438ee2aecc986c520bb603988a78ff6aaaf70a471bf4584fe0b78dae"
+    },
+    "frontend-design": {
+      "source": "robotka1321/great-product-skills",
+      "sourceType": "github",
+      "computedHash": "516bd2154eb843a8240e43d5b285229129853114ad7075a5e141e1c08e408c84"
+    },
+    "security-audit": {
+      "source": "netresearch/security-audit-skill",
+      "sourceType": "github",
+      "computedHash": "007d1f22d1d8d215ec7666adb7bd2d6bcb38c5f44bcf26f91947603fc9ea4f15"
+    },
+    "spec-generate": {
+      "source": "robotka1321/great-product-skills",
+      "sourceType": "github",
+      "computedHash": "7a6088baf7681babdef42127925119c3eb2cabcff430f93e7ea40a65ea5bdb2c"
+    }
+  }
+}
