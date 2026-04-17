@@ -2,6 +2,7 @@ import { httpRouter } from "convex/server";
 import { handleClerkWebhook } from "./clerkWebhook";
 import { sendSmsOtp } from "./sms";
 import { onPaymentConfirmed } from "./escrow";
+import { onChapaProPayment } from "./pro";
 
 const http = httpRouter();
 
@@ -19,11 +20,18 @@ http.route({
   handler: sendSmsOtp,
 });
 
-// Chapa + Telebirr payment confirmation webhook
+// Chapa + Telebirr escrow payment confirmation webhook
 http.route({
   path: "/escrow-webhook",
   method: "POST",
   handler: onPaymentConfirmed,
+});
+
+// Chapa Pro subscription payment webhook
+http.route({
+  path: "/pro-webhook",
+  method: "POST",
+  handler: onChapaProPayment,
 });
 
 export default http;

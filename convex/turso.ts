@@ -460,6 +460,35 @@ export async function computeSellerTrust(sellerId: string): Promise<{
   };
 }
 
+export async function getExpiredProUsers(): Promise<string[]> {
+  const db = getDb();
+  const rows = await db.select({ id: schema.users.id })
+    .from(schema.users)
+    .where(and(
+      eq(schema.users.plan, "pro"),
+      lt(schema.users.planExpiresAt, Date.now()),
+    ));
+  return rows.map((r) => r.id as string);
+}
+
+export async function archiveExcessListings(userId: string, keepCount: number): Promise<void> {
+  const db = getDb();
+  const active = await db.select({ id: schema.listings.id })
+    .from(schema.listings)
+    .where(and(eq(schema.listings.sellerId, userId), eq(schema.listings.status, "ACTIVE")))
+    .orderBy(desc(schema.listings.createdAt));
+
+  const toArchive = active.slice(keepCount).map((r) => r.id);
+  if (toArchive.length === 0) return;
+
+  await db.update(schema.listings)
+    .set({ status: "ARCHIVED", updatedAt: Date.now() })
+    .where(and(
+      eq(schema.listings.sellerId, userId),
+      inArray(schema.listings.id, toArchive),
+    ));
+}
+
 export async function getAllSellerIds(): Promise<string[]> {
   const db = getDb();
   const rows = await db.select({ id: schema.users.id })

@@ -43,6 +43,12 @@ crons.daily(
   {},
 );
 
-// P9 adds: pro.expirePlans
+// Daily Pro plan expiry check (1 AM UTC)
+crons.daily(
+  "pro.expirePlans",
+  { hourUTC: 1, minuteUTC: 0 },
+  internal.pro.expireIfDue,
+  {},
+);
 
 export default crons;
