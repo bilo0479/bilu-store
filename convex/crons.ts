@@ -3,7 +3,7 @@ import { internal } from "./_generated/api";
 
 const crons = cronJobs();
 
-// P3: Activity pruning (30-day retention)
+// Activity pruning — 30-day retention
 crons.daily(
   "activity.prune",
   { hourUTC: 4, minuteUTC: 0 },
@@ -11,7 +11,15 @@ crons.daily(
   {},
 );
 
-// P4 adds: listings.expire, ads.expireBoosts, pro.expirePlans, intel.rebuildTrustScores
-// P6 adds: escrowCodes.prune
+// Expire listings past their expiresAt timestamp (runs hourly)
+crons.hourly(
+  "listings.expire",
+  { minuteUTC: 5 },
+  internal.listings.expireListingsCron,
+  {},
+);
+
+// P7 adds: intel.rebuildTrustScores
+// P9 adds: pro.expirePlans
 
 export default crons;
