@@ -6,6 +6,8 @@ import { audit } from "./helpers/audit";
 import * as turso from "./turso";
 import { internal } from "./_generated/api";
 
+const SEARCH_ENGINE = process.env.SEARCH_ENGINE ?? "convex";
+
 const LISTING_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 // ── Public queries ────────────────────────────────────────────────────────────
@@ -169,6 +171,22 @@ export const syncListingToConvex = internalMutation({
       await ctx.db.patch(existing._id, convexListing);
     } else {
       await ctx.db.insert("listings", convexListing);
+    }
+
+    // Sync to Algolia when enabled (fire-and-forget — search stays eventually consistent)
+    if (SEARCH_ENGINE === "algolia") {
+      await ctx.scheduler.runAfter(0, internal.search.algoliaSync, {
+        listingId: listing.id,
+        title: listing.title,
+        description: listing.description,
+        category: listing.category,
+        price: listing.price,
+        locationCity: listing.locationCity,
+        status: listing.status,
+        isPremium: listing.isPremium,
+        sellerId: listing.sellerId,
+        createdAt: listing.createdAt,
+      });
     }
   },
 });
