@@ -10,6 +10,8 @@ import {
 } from "@expo-google-fonts/inter";
 import { ClerkProvider, useAuth, useUser } from "@clerk/clerk-expo";
 import * as SecureStore from "expo-secure-store";
+import { ConvexProvider, ConvexReactClient } from "convex/react";
+import { ConvexProviderWithClerk } from "convex/react-clerk";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
@@ -48,6 +50,10 @@ import { COLORS, FONT_SIZE } from "../src/constants/colors";
 import { useNetworkStatus } from "../src/hooks/useNetworkStatus";
 
 SplashScreen.preventAutoHideAsync();
+
+// Convex client — URL provided by EXPO_PUBLIC_CONVEX_URL after `npx convex dev`
+const convexUrl = process.env.EXPO_PUBLIC_CONVEX_URL ?? "https://placeholder.convex.cloud";
+const convexClient = new ConvexReactClient(convexUrl);
 
 // SecureStore token cache for Clerk — tokens are stored in the device keychain,
 // never in AsyncStorage (which is unencrypted).
@@ -212,6 +218,7 @@ export default function RootLayout() {
       publishableKey={process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY!}
       tokenCache={tokenCache}
     >
+      <ConvexProviderWithClerk client={convexClient} useAuth={useAuth}>
       <SafeAreaProvider>
         <ErrorBoundary>
           <QueryClientProvider client={queryClient}>
@@ -237,6 +244,7 @@ export default function RootLayout() {
           </QueryClientProvider>
         </ErrorBoundary>
       </SafeAreaProvider>
+      </ConvexProviderWithClerk>
     </ClerkProvider>
   );
 }
