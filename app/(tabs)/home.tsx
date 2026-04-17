@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { DrawerContent } from '../../src/components/DrawerContent';
 import {
-  View, Text, FlatList, StyleSheet, Pressable,
+  View, Text, StyleSheet, Pressable,
   RefreshControl, ActivityIndicator, Dimensions,
 } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -154,7 +155,7 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
-      <FlatList
+      <FlashList
         data={ads}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
@@ -170,16 +171,10 @@ export default function HomeScreen() {
           />
         }
         contentContainerStyle={styles.list}
-        columnWrapperStyle={styles.row}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={COLORS.ACCENT} />
         }
         showsVerticalScrollIndicator={false}
-        getItemLayout={(data, index) => ({
-          length: AD_CARD_HEIGHT,
-          offset: AD_CARD_HEIGHT * index,
-          index,
-        })}
       />
       <DrawerContent visible={drawerOpen} onClose={() => setDrawerOpen(false)} />
       <OnboardingOverlay />

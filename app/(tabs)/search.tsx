@@ -1,8 +1,9 @@
 import React, { useState, useCallback } from 'react';
 import {
-  View, Text, TextInput, FlatList, StyleSheet,
+  View, Text, TextInput, StyleSheet,
   Pressable, RefreshControl, Dimensions, ScrollView,
 } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -138,12 +139,11 @@ export default function SearchScreen() {
           <SkeletonCardGrid count={6} />
         </View>
       ) : (
-        <FlatList
+        <FlashList
           data={results}
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
           numColumns={2}
-          columnWrapperStyle={styles.row}
           contentContainerStyle={styles.list}
           refreshControl={
             hasSearched ? (
@@ -174,11 +174,6 @@ export default function SearchScreen() {
             )
           }
           showsVerticalScrollIndicator={false}
-          getItemLayout={(data, index) => ({
-            length: AD_CARD_HEIGHT,
-            offset: AD_CARD_HEIGHT * index,
-            index,
-          })}
         />
       )}
     </View>

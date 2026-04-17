@@ -1,8 +1,9 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import {
-  View, Text, TextInput, FlatList, StyleSheet,
+  View, Text, TextInput, StyleSheet,
   Pressable, ActivityIndicator,
 } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -118,12 +119,11 @@ export default function SearchResultsScreen() {
           <ActivityIndicator size="large" color={COLORS.ACCENT} />
         </View>
       ) : (
-        <FlatList
+        <FlashList
           data={results}
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
           numColumns={2}
-          columnWrapperStyle={styles.row}
           contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + 20 }]}
           ListEmptyComponent={
             <EmptyState
@@ -133,11 +133,6 @@ export default function SearchResultsScreen() {
             />
           }
           showsVerticalScrollIndicator={false}
-          getItemLayout={(data, index) => ({
-            length: AD_CARD_HEIGHT,
-            offset: AD_CARD_HEIGHT * index,
-            index,
-          })}
         />
       )}
     </View>

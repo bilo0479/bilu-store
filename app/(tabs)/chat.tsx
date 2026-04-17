@@ -1,5 +1,6 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, FlatList, StyleSheet, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, RefreshControl } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { COLORS, FONT_SIZE } from '../../src/constants/colors';
@@ -52,14 +53,14 @@ export default function ChatsScreen() {
       {isLoading && chats.length === 0 ? (
         <SkeletonChatList count={6} />
       ) : (
-        <FlatList
+        <FlashList
           data={chats}
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => (
-              <ChatListItem
-                chat={item}
-                onPress={() => router.push(`/chat/${item.id}` as never)}
-              />
+            <ChatListItem
+              chat={item}
+              onPress={() => router.push(`/chat/${item.id}` as never)}
+            />
           )}
           ListEmptyComponent={
             <EmptyState
@@ -74,11 +75,6 @@ export default function ChatsScreen() {
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={COLORS.ACCENT} />
           }
-          getItemLayout={(data, index) => ({
-            length: CHAT_ITEM_HEIGHT,
-            offset: CHAT_ITEM_HEIGHT * index,
-            index,
-          })}
         />
       )}
     </View>

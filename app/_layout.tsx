@@ -1,3 +1,6 @@
+import "../global.css";
+
+import * as Sentry from "@sentry/react-native";
 import {
   Inter_400Regular,
   Inter_500Medium,
@@ -14,6 +17,25 @@ import { StatusBar } from "expo-status-bar";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { router } from "expo-router";
+
+Sentry.init({
+  dsn: process.env.EXPO_PUBLIC_SENTRY_DSN,
+  tracesSampleRate: 0.2,
+  enabled: !__DEV__,
+  beforeSend(event) {
+    // Strip PII from events — full scrub in P11; this is the hook point
+    if (event.user) {
+      delete event.user.email;
+      delete event.user.ip_address;
+    }
+    return event;
+  },
+});
+
+if (__DEV__) {
+  // Verify Sentry init works during development
+  Sentry.captureMessage("Sentry init verified", "debug");
+}
 
 import { ErrorBoundary } from "../src/components/ErrorBoundary";
 import { Toast } from "../src/components/Toast";

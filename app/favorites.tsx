@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  View, FlatList, StyleSheet, RefreshControl,
+  View, StyleSheet, RefreshControl,
 } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { COLORS } from '../src/constants/colors';
@@ -65,11 +66,10 @@ export default function FavoritesScreen() {
   }
 
   return (
-    <FlatList
+    <FlashList
       data={ads}
       keyExtractor={(item) => item.id}
       numColumns={2}
-      columnWrapperStyle={styles.row}
       renderItem={({ item }) => (
         <View style={{ flex: 1 }}>
           <AdCard
@@ -94,11 +94,6 @@ export default function FavoritesScreen() {
       }
       contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + 20 }]}
       showsVerticalScrollIndicator={false}
-      getItemLayout={(data, index) => ({
-        length: AD_CARD_HEIGHT,
-        offset: AD_CARD_HEIGHT * index,
-        index,
-      })}
     />
   );
 }

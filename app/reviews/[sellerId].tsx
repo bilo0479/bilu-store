@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import {
-  View, Text, FlatList, StyleSheet, ActivityIndicator,
+  View, Text, StyleSheet, ActivityIndicator,
 } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -64,7 +65,7 @@ export default function ReviewsScreen() {
   }
 
   return (
-    <FlatList
+    <FlashList
       data={reviews}
       keyExtractor={(item) => item.id}
       renderItem={({ item }) => <ReviewItem review={item} />}
@@ -74,11 +75,6 @@ export default function ReviewsScreen() {
       ItemSeparatorComponent={() => <View style={styles.separator} />}
       contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + 20 }]}
       showsVerticalScrollIndicator={false}
-      getItemLayout={(data, index) => ({
-        length: REVIEW_ITEM_HEIGHT,
-        offset: REVIEW_ITEM_HEIGHT * index,
-        index,
-      })}
     />
   );
 }

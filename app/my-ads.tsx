@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import {
-  View, Text, FlatList, StyleSheet, Pressable, ActivityIndicator,
+  View, Text, StyleSheet, Pressable, ActivityIndicator,
 } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -95,7 +96,7 @@ export default function MyAdsScreen() {
   }
 
   return (
-    <FlatList
+    <FlashList
       data={ads}
       keyExtractor={(item) => item.id}
       renderItem={({ item }) => (
@@ -117,11 +118,6 @@ export default function MyAdsScreen() {
       }
       ItemSeparatorComponent={() => <View style={styles.separator} />}
       contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + 20 }]}
-      getItemLayout={(data, index) => ({
-        length: MY_AD_ITEM_HEIGHT,
-        offset: MY_AD_ITEM_HEIGHT * index,
-        index,
-      })}
     />
   );
 }

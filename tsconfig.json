@@ -6,6 +6,12 @@
     "paths": {
       "@/*": [
         "./*"
+      ],
+      "@bilustore/shared": [
+        "./packages/shared/index.ts"
+      ],
+      "@bilustore/shared/*": [
+        "./packages/shared/*.ts"
       ]
     }
   },

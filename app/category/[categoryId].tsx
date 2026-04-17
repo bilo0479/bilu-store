@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import {
-  View, Text, FlatList, StyleSheet, Pressable, ActivityIndicator,
+  View, Text, StyleSheet, Pressable, ActivityIndicator,
 } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -71,11 +72,10 @@ export default function CategoryScreen() {
           <ActivityIndicator size="large" color={COLORS.ACCENT} />
         </View>
       ) : (
-        <FlatList
+        <FlashList
           data={ads}
           keyExtractor={(item) => item.id}
           numColumns={2}
-          columnWrapperStyle={styles.row}
           renderItem={({ item }) => (
             <View style={{ flex: 1 }}>
               <AdCard
@@ -91,11 +91,6 @@ export default function CategoryScreen() {
           }
           contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + 20 }]}
           showsVerticalScrollIndicator={false}
-          getItemLayout={(data, index) => ({
-            length: AD_CARD_HEIGHT,
-            offset: AD_CARD_HEIGHT * index,
-            index,
-          })}
         />
       )}
     </View>
