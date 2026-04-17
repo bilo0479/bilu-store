@@ -2,7 +2,6 @@ import { create } from 'zustand';
 import { fetchHomeFeed, fetchAdsByCategory, getFeaturedAds } from '../services/AdService';
 import { searchByKeyword, browseWithFilters } from '../services/SearchService';
 import type { Ad, CategoryId, SearchFilters } from '../types';
-import type { QueryDocumentSnapshot } from 'firebase/firestore';
 
 interface AdsState {
   homeFeed: Ad[];
@@ -10,7 +9,7 @@ interface AdsState {
   categoryAds: Ad[];
   searchResults: Ad[];
   isLoading: boolean;
-  lastDoc: QueryDocumentSnapshot | null;
+  lastDoc: number | null;
   hasMore: boolean;
 
   loadHomeFeed: () => Promise<void>;

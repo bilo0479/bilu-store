@@ -1,23 +1,15 @@
-import { getFunctions, httpsCallable } from 'firebase/functions';
-import { app } from '../config/firebase';
+/**
+ * PaymentService — P12 Firebase purge
+ *
+ * Payment is now handled via Convex actions (escrow.initiate, pro.startCheckout).
+ * This stub is kept for call-site compatibility in legacy screens.
+ */
 import type { InitializePaymentResult, PaymentMethod, PremiumTierId } from '../types';
 
-/**
- * Calls the onPaymentInitialize Cloud Function.
- * Returns a checkoutUrl (for WebView / Telebirr) or ussdPushSent flag (for USSD).
- */
 export async function initializePayment(
-  adId: string,
-  tierId: PremiumTierId,
-  method: PaymentMethod
+  _adId: string,
+  _tierId: PremiumTierId,
+  _method: PaymentMethod
 ): Promise<InitializePaymentResult> {
-  if (!app) throw new Error('Firebase is not configured');
-  const functions = getFunctions(app);
-  const callable = httpsCallable<
-    { adId: string; tierId: string; method: PaymentMethod },
-    InitializePaymentResult
-  >(functions, 'onPaymentInitialize');
-
-  const result = await callable({ adId, tierId, method });
-  return result.data;
+  throw new Error('Use api.escrow.initiate or api.pro.startCheckout via Convex');
 }
