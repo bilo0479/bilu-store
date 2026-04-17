@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { DrawerContent } from '../../src/components/DrawerContent';
 import {
   View, Text, StyleSheet, Pressable,
@@ -14,12 +14,16 @@ import { AdCard } from '../../src/components/AdCard';
 import { EmptyState } from '../../src/components/EmptyState';
 import { SkeletonCardGrid } from '../../src/components/Skeleton';
 import { OnboardingOverlay } from '../../src/components/OnboardingOverlay';
+import { FeedAdSlot } from '../../src/components/FeedAdSlot';
 import { useAuthStore } from '../../src/stores/authStore';
 import { useFavoritesStore } from '../../src/stores/favoritesStore';
 import { useChatStore } from '../../src/stores/chatStore';
 import { useAdsStore } from '../../src/stores/adsStore';
 import { redirectToLogin } from '../../src/hooks/useAuth';
 import type { Ad } from '../../src/types';
+
+type AdSlot = { _type: 'ad'; id: string };
+type FeedItem = Ad | AdSlot;
 import * as Haptics from 'expo-haptics';
 
 const SCREEN_W = Dimensions.get('window').width;
@@ -33,6 +37,17 @@ export default function HomeScreen() {
   const subscribeToChats = useChatStore(s => s.subscribeToChats);
 
   const { homeFeed: ads, isLoading, loadHomeFeed, loadMoreHomeFeed } = useAdsStore();
+
+  const feedItems = useMemo<FeedItem[]>(() => {
+    const result: FeedItem[] = [];
+    ads.forEach((ad, i) => {
+      result.push(ad);
+      if ((i + 1) % 8 === 0) {
+        result.push({ _type: 'ad', id: `ad-slot-${i}` });
+      }
+    });
+    return result;
+  }, [ads]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -131,16 +146,31 @@ export default function HomeScreen() {
     </View>
   );
 
-  const renderItem = ({ item, index }: { item: Ad; index: number }) => (
-    <View style={index % 2 === 0 ? styles.leftCard : styles.rightCard}>
-      <AdCard
-        ad={item}
-        onPress={() => router.push(`/ad/${item.id}` as never)}
-        onFavorite={() => handleFavorite(item.id)}
-        isFavorited={favoriteAdIds.has(item.id)}
-      />
-    </View>
+  const overrideItemLayout = useCallback(
+    (layout: { span?: number }, item: FeedItem) => {
+      if ('_type' in item && item._type === 'ad') {
+        layout.span = 2;
+      }
+    },
+    [],
   );
+
+  const renderItem = ({ item }: { item: FeedItem; index: number }) => {
+    if ('_type' in item && item._type === 'ad') {
+      return <FeedAdSlot />;
+    }
+    const ad = item as Ad;
+    return (
+      <View style={styles.cardWrapper}>
+        <AdCard
+          ad={ad}
+          onPress={() => router.push(`/ad/${ad.id}` as never)}
+          onFavorite={() => handleFavorite(ad.id)}
+          isFavorited={favoriteAdIds.has(ad.id)}
+        />
+      </View>
+    );
+  };
 
   if (loading) {
     return (
@@ -156,10 +186,11 @@ export default function HomeScreen() {
   return (
     <View style={styles.container}>
       <FlashList
-        data={ads}
-        keyExtractor={(item) => item.id}
+        data={feedItems}
+        keyExtractor={(item) => ('_type' in item ? item.id : item.id)}
         renderItem={renderItem}
         numColumns={2}
+        overrideItemLayout={overrideItemLayout}
         ListHeaderComponent={renderHeader}
         ListEmptyComponent={
           <EmptyState
@@ -263,10 +294,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     gap: 12,
   },
-  leftCard: {
-    flex: 1,
-  },
-  rightCard: {
+  cardWrapper: {
     flex: 1,
   },
 });

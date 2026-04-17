@@ -43,6 +43,7 @@ if (__DEV__) {
 
 import { ErrorBoundary } from "../src/components/ErrorBoundary";
 import { Toast } from "../src/components/Toast";
+import { ConsentGate } from "../src/components/ConsentGate";
 import { useAuthStore } from "../src/stores/authStore";
 import { useUiStore } from "../src/stores/uiStore";
 import { fetchUserProfile, consumeRedirectIntent } from "../src/services/AuthService";
@@ -219,6 +220,7 @@ export default function RootLayout() {
       tokenCache={tokenCache}
     >
       <ConvexProviderWithClerk client={convexClient} useAuth={useAuth}>
+      <ConsentGate>
       <SafeAreaProvider>
         <ErrorBoundary>
           <QueryClientProvider client={queryClient}>
@@ -244,6 +246,7 @@ export default function RootLayout() {
           </QueryClientProvider>
         </ErrorBoundary>
       </SafeAreaProvider>
+      </ConsentGate>
       </ConvexProviderWithClerk>
     </ClerkProvider>
   );

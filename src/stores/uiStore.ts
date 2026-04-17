@@ -13,15 +13,18 @@ interface UiState {
   toastMessage: string | null;
   toastData: ToastData | null;
   isGlobalLoading: boolean;
+  lastInterstitialAt: number | null;
   showToast: (msg: string, type?: ToastType, options?: { actionLabel?: string; onAction?: () => void }) => void;
   hideToast: () => void;
   setGlobalLoading: (loading: boolean) => void;
+  setLastInterstitialAt: (ts: number) => void;
 }
 
 export const useUiStore = create<UiState>((set) => ({
   toastMessage: null,
   toastData: null,
   isGlobalLoading: false,
+  lastInterstitialAt: null,
   showToast: (msg, type = 'default', options) => {
     set({
       toastMessage: msg,
@@ -31,4 +34,5 @@ export const useUiStore = create<UiState>((set) => ({
   },
   hideToast: () => set({ toastMessage: null, toastData: null }),
   setGlobalLoading: (loading) => set({ isGlobalLoading: loading }),
+  setLastInterstitialAt: (ts) => set({ lastInterstitialAt: ts }),
 }));

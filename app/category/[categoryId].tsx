@@ -14,6 +14,7 @@ import { useAuthStore } from '../../src/stores/authStore';
 import { useFavoritesStore } from '../../src/stores/favoritesStore';
 import { fetchAdsByCategory } from '../../src/services/AdService';
 import { redirectToLogin } from '../../src/hooks/useAuth';
+import { useInterstitialAd } from '../../src/hooks/useInterstitialAd';
 import type { Ad, CategoryId } from '../../src/types';
 import * as Haptics from 'expo-haptics';
 
@@ -25,11 +26,16 @@ export default function CategoryScreen() {
   const user = useAuthStore(s => s.user);
   const isAuthenticated = useAuthStore(s => s.isAuthenticated);
   const { favoriteAdIds, toggle: toggleFav } = useFavoritesStore();
+  const { showIfReady } = useInterstitialAd();
 
   const [ads, setAds] = useState<Ad[]>([]);
   const [loading, setLoading] = useState(true);
 
   const category = getCategoryMeta(categoryId as CategoryId);
+
+  useEffect(() => {
+    showIfReady();
+  }, [categoryId]);
 
   useEffect(() => {
     if (!categoryId) return;
