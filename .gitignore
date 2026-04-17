@@ -51,3 +51,6 @@ functions/.env
 web/.next/
 *.log
 web-dev.log
+
+# git worktrees
+.worktrees/
