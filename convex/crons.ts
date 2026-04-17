@@ -27,7 +27,22 @@ crons.interval(
   {},
 );
 
-// P7 adds: intel.rebuildTrustScores
+// Nightly seller trust score rebuild (3 AM UTC)
+crons.daily(
+  "intel.rebuildTrustScores",
+  { hourUTC: 3, minuteUTC: 0 },
+  internal.intel.rebuildTrustScores,
+  {},
+);
+
+// Prune expired listing suppressions (daily)
+crons.daily(
+  "intel.pruneSuppressions",
+  { hourUTC: 3, minuteUTC: 30 },
+  internal.intel.pruneExpiredSuppressions,
+  {},
+);
+
 // P9 adds: pro.expirePlans
 
 export default crons;

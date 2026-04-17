@@ -301,6 +301,79 @@ export async function upsertSellerTrust(input: typeof schema.sellerTrust.$inferI
     });
 }
 
+export async function recordListingInteraction(
+  listingId: number,
+  verb: "view" | "click" | "save" | "share",
+): Promise<void> {
+  const db = getDb();
+  const col = verb === "view" ? schema.listings.viewCount
+    : verb === "click" ? schema.listings.clickCount
+    : verb === "save" ? schema.listings.saveCount
+    : null;
+
+  if (!col) return;
+
+  await db.update(schema.listings)
+    .set({ [col.name]: sql`${col} + 1` })
+    .where(eq(schema.listings.id, listingId));
+
+  // Recompute viral score: log(views+1)*2 + clicks*3 + saves*5 + shares*8
+  const row = await db.select({
+    v: schema.listings.viewCount,
+    cl: schema.listings.clickCount,
+    s: schema.listings.saveCount,
+  }).from(schema.listings).where(eq(schema.listings.id, listingId)).get();
+
+  if (row) {
+    const viralScore = Math.log1p(row.v + 1) * 2 + row.cl * 3 + row.s * 5;
+    await db.update(schema.listings)
+      .set({ viralScore })
+      .where(eq(schema.listings.id, listingId));
+  }
+}
+
+export async function computeSellerTrust(sellerId: string): Promise<{
+  fulfillmentRate: number;
+  responseHrs: number;
+  weightedRating: number;
+  trustScore: number;
+} | null> {
+  const db = getDb();
+
+  // Fulfillment rate = completed deals / total deals
+  const deals = await db.select({
+    status: schema.escrowDeals.status,
+  }).from(schema.escrowDeals).where(eq(schema.escrowDeals.sellerId, sellerId));
+
+  if (deals.length === 0) return null;
+
+  const completed = deals.filter((d) => d.status === "completed").length;
+  const fulfillmentRate = completed / deals.length;
+
+  // Weighted rating from reviews
+  const reviews = await db.select({ rating: schema.reviews.rating })
+    .from(schema.reviews)
+    .where(eq(schema.reviews.sellerId, sellerId));
+
+  const weightedRating = reviews.length > 0
+    ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length
+    : 3.0;
+
+  // Trust score: fulfillmentRate*50 + (weightedRating/5)*40 + min(reviews.length,10)*1
+  const trustScore = Math.round(
+    fulfillmentRate * 50 +
+    (weightedRating / 5) * 40 +
+    Math.min(reviews.length, 10)
+  );
+
+  return {
+    fulfillmentRate: Math.round(fulfillmentRate * 100) / 100,
+    responseHrs: 24, // Placeholder — implement chat response time in P8
+    weightedRating: Math.round(weightedRating * 10) / 10,
+    trustScore,
+  };
+}
+
 export async function getAllSellerIds(): Promise<string[]> {
   const db = getDb();
   const rows = await db.select({ id: schema.users.id })
